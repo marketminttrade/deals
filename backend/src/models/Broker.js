@@ -1,0 +1,79 @@
+const mongoose = require("mongoose");
+
+const brokerSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    tokenId: { type: String, required: true, unique: true, trim: true, uppercase: true },
+    legalName: { type: String, trim: true },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+    },
+    contact: {
+      email: { type: String, trim: true, lowercase: true },
+      phone: { type: String, trim: true },
+      website: { type: String, trim: true },
+      supportDesk: { type: String, trim: true },
+    },
+    branding: {
+      brokerageHouseName: { type: String, trim: true },
+      logoText: { type: String, trim: true },
+      shortName: { type: String, trim: true },
+      primaryColor: { type: String, default: "#18b5d6" },
+      accentColor: { type: String, default: "#87dff0" },
+      surfaceTint: { type: String, default: "#f2fcff" },
+      headerTone: { type: String, default: "Market-ready execution for modern broker desks." },
+      // Tagline displayed in invoice header and app UI
+      tagline: { type: String, trim: true, default: "GROW WEALTH | SECURE FUTURE | PROSPER TOGETHER" },
+      logoUrl: { type: String, trim: true },
+      logoPublicId: { type: String, trim: true },
+      horizontalLogoUrl: { type: String, trim: true },
+      horizontalLogoPublicId: { type: String, trim: true },
+      signatureUrl: { type: String, trim: true },
+      signaturePublicId: { type: String, trim: true },
+      // stampUrl / stampPublicId: Official stamp/seal image for invoice
+      stampUrl: { type: String, trim: true },
+      stampPublicId: { type: String, trim: true },
+      trademarkUrl: { type: String, trim: true },
+      trademarkPublicId: { type: String, trim: true },
+      signatureLabel: { type: String, trim: true, default: "Authorized Signature" },
+      trademarkLabel: { type: String, trim: true, default: "Registered Mark" },
+    },
+    documents: {
+      templateKey: { type: String, default: "official-default" },
+      statementPrefix: { type: String, default: "ST" },
+      statementTitle: { type: String, default: "Closed Trade Statement" },
+      statementSubtitle: { type: String, default: "Portfolio P&L Report" },
+      clientLabel: { type: String, default: "Client ID" },
+      receiptPrefix: { type: String, default: "RCP" },
+      invoicePrefix: { type: String, default: "INV" },
+      footerText: {
+        type: String,
+        default: "This is a system-generated statement and does not require a signature.",
+      },
+      supportText: {
+        type: String,
+        default: "For support, contact your broker operations desk. All figures are in INR.",
+      },
+      disclaimer: {
+        type: String,
+        default: "Brokerage, statutory charges and trade values are subject to exchange rules and broker policy.",
+      },
+      // Invoice visibility toggles
+      showSignature: { type: Boolean, default: true },
+      showTrademark: { type: Boolean, default: false },
+      showChargesBreakup: { type: Boolean, default: true },
+      showTaxSummary: { type: Boolean, default: true },
+      showClientContact: { type: Boolean, default: true },
+      showStamp: { type: Boolean, default: true },
+      showFooterNotes: { type: Boolean, default: true },
+      // Regulatory identifiers shown in invoice footer
+      exchangeMemberIds: { type: String, trim: true, default: "" },
+      sebiRegistrationNo: { type: String, trim: true, default: "" },
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Broker", brokerSchema);

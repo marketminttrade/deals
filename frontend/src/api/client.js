@@ -1,0 +1,32 @@
+import axios from "axios";
+
+export const API_BASE_URL = process.env.REACT_APP_API_URL || "";
+export const AUTH_STORAGE_KEY = "broker-platform:auth-token";
+export const BROKER_AUTH_STORAGE_KEY = "dealsrewards:access-token";
+export const LEGACY_BROKER_AUTH_STORAGE_KEY = "broker-platform:broker-auth-token";
+
+function createApiClient(storageKey) {
+  const client = axios.create({
+    baseURL: API_BASE_URL,
+  });
+
+  client.interceptors.request.use((config) => {
+    const storageKeys = Array.isArray(storageKey) ? storageKey : storageKey ? [storageKey] : [];
+    const token = storageKeys.map((key) => localStorage.getItem(key)).find(Boolean) || null;
+
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  });
+
+  return client;
+}
+
+const adminApi = createApiClient(AUTH_STORAGE_KEY);
+export const brokerApi = createApiClient([BROKER_AUTH_STORAGE_KEY, LEGACY_BROKER_AUTH_STORAGE_KEY]);
+export const publicApi = createApiClient();
+
+export default adminApi;
