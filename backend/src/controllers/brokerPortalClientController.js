@@ -3,6 +3,7 @@ const path = require("path");
 const Client = require("../models/Client");
 const { uploadImageBuffer } = require("../config/cloudinary");
 const { ALLOWED_CUSTOMER_DOCUMENT_TYPES, getCustomerUploadDir } = require("../config/upload");
+const { isKycComplete, updateKycStatus } = require("../services/kycStatus");
 
 const CUSTOMER_DOCUMENT_FIELD_MAP = {
   aadhaarFront: "aadhaarFrontUrl",
@@ -69,61 +70,9 @@ function deriveFullName(input = {}, existing = {}) {
   return String(existing.fullName ?? "").trim();
 }
 
-function isKycComplete(client) {
-  const kyc = client.kyc || {};
-
-  return Boolean(
-    String(kyc.firstName || "").trim() &&
-      String(kyc.lastName || "").trim() &&
-      String(kyc.fatherName || "").trim() &&
-      String(client.idCode || "").trim() &&
-      String(client.phone || "").trim() &&
-      String(client.address || "").trim() &&
-      String(kyc.gender || "").trim() &&
-      kyc.dateOfBirth &&
-      kyc.applicationDate &&
-      Number(kyc.initialDeposit || 0) >= 0 &&
-      String(kyc.aadhaarNumber || "").trim() &&
-      String(kyc.panNumber || "").trim() &&
-      String(kyc.aadhaarFrontUrl || "").trim() &&
-      String(kyc.aadhaarBackUrl || "").trim() &&
-      String(kyc.panImageUrl || "").trim() &&
-      String(kyc.customerPhotoUrl || "").trim() &&
-      String(kyc.customerSignatureUrl || "").trim()
-  );
-}
-
-function getNextKycStatus(client, previousStatus = "incomplete") {
-  if (!isKycComplete(client)) {
-    return "incomplete";
-  }
-
-  return previousStatus === "generated" ? "generated" : "ready";
-}
-
 function buildKycPayload(input = {}, existingKyc = {}) {
   const now = new Date();
-  const validTillDate = new Date();
-  validTillDate.setFullYear(now.getFullYear() + 1);
-
-  const history = Array.isArray(input.history)
-    ? input.history
-    : Array.isArray(existingKyc.history) && existingKyc.history.length > 0
-    ? existingKyc.history
-    : [
-        {
-          title: "KYC Submitted",
-          description: "KYC documents have been submitted.",
-          timestamp: existingKyc.submittedAt || now,
-          iconType: "submit",
-        },
-        {
-          title: "KYC Verified",
-          description: "KYC has been successfully verified.",
-          timestamp: existingKyc.verifiedAt || now,
-          iconType: "verify",
-        },
-      ];
+  const history = existingKyc.history || [];
 
   return {
     firstName: input.firstName ? String(input.firstName).trim() : existingKyc.firstName || "",
@@ -176,12 +125,12 @@ function buildKycPayload(input = {}, existingKyc = {}) {
     nationality: input.nationality ? String(input.nationality).trim() : existingKyc.nationality || "Indian",
     pep: input.pep !== undefined ? String(input.pep).trim() : existingKyc.pep || "No",
     sourceOfFunds: input.sourceOfFunds ? String(input.sourceOfFunds).trim() : existingKyc.sourceOfFunds || "Salary",
-    status: input.status || existingKyc.status || "incomplete",
+    status: existingKyc.status || "incomplete",
     referenceNumber: existingKyc.referenceNumber || "",
-    generatedAt: existingKyc.generatedAt || now,
-    submittedAt: existingKyc.submittedAt || now,
-    verifiedAt: existingKyc.verifiedAt || now,
-    validTill: existingKyc.validTill || validTillDate,
+    generatedAt: existingKyc.generatedAt || null,
+    submittedAt: existingKyc.submittedAt || null,
+    verifiedAt: existingKyc.verifiedAt || null,
+    validTill: existingKyc.validTill || null,
     history,
   };
 }
@@ -212,6 +161,13 @@ function buildClientPayload(input, existing = {}) {
     status: input.status || existing.status || "active",
     kyc: buildKycPayload(input.kyc || input, existingKyc),
   };
+
+  if (input.fullName && !input.kyc) {
+    const [firstName, ...rest] = payload.fullName.split(/\s+/);
+    payload.kyc.firstName = firstName;
+    payload.kyc.lastName = rest.join(" ");
+  }
+  updateKycStatus(payload, existingKyc.status);
 
   return payload;
 }
@@ -313,7 +269,9 @@ async function uploadCustomerDocument(req, res) {
     [fieldName]: uploadedAsset.secureUrl,
     [publicIdFieldName]: uploadedAsset.publicId,
   };
-  client.kyc.status = getNextKycStatus(client.toObject(), existingKyc.status);
+  client.kyc.submittedAt = existingKyc.submittedAt || new Date();
+  client.kyc.history.push({ title: "Document uploaded", description: `${documentType} uploaded.`, timestamp: new Date(), iconType: "submit" });
+  updateKycStatus(client, existingKyc.status);
 
   await client.save();
 

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { BROKERAGE_MODES } = require("../services/tradeInput");
 
 const tradeSchema = new mongoose.Schema(
   {
@@ -55,11 +56,11 @@ const tradeSchema = new mongoose.Schema(
     ltpColor: { type: String, enum: ["green", "red"], default: "green" },
     totalBuy: { type: Number, default: 0 },
     totalSell: { type: Number, default: 0 },
-    brokeragePercent: { type: Number, default: 0 },
-    // "percentage" = % of turnover; "flat_per_lot" = flat ₹ per lot (used for Options/Futures)
+    // Legacy field name: the rate's unit is determined by brokerageMode.
+    brokeragePercent: { type: Number, default: 0, min: 0 },
     brokerageMode: {
       type: String,
-      enum: ["percentage", "flat_per_lot"],
+      enum: BROKERAGE_MODES,
       default: "percentage",
     },
     status: {
@@ -85,6 +86,7 @@ const tradeSchema = new mongoose.Schema(
     },
     grossPnL: { type: Number, default: 0 },
     netPnL: { type: Number, default: 0 },
+    calculationVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

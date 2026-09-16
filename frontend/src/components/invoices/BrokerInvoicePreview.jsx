@@ -52,6 +52,10 @@ export default function BrokerInvoicePreview({
     return acc + (t.totalBuy || (buyP * units + sellP * units));
   }, 0);
   const totalBrokerage = summary?.totalBrokerage || invoiceTrades.reduce((acc, t) => acc + (t.charges?.brokerage || t.charges?.total || 0), 0);
+  const totalGrossPnL = summary?.grossPnL !== undefined ? summary.grossPnL : invoiceTrades.reduce((acc, t) => acc + (t.grossPnL || 0), 0);
+  const totalNetPnL = summary?.netPnL !== undefined ? summary.netPnL : invoiceTrades.reduce((acc, t) => acc + (t.netPnL || 0), 0);
+  const isNetProfit = totalNetPnL >= 0;
+  const isGrossProfit = totalGrossPnL >= 0;
   const totalTrades = summary?.totalTrades || invoiceTrades.length;
   const totalQty = invoiceTrades.reduce((acc, t) => acc + (Number(t.quantity || 1) * Number(t.lotSize || 1)), 0);
 
@@ -263,10 +267,12 @@ export default function BrokerInvoicePreview({
               </tbody>
               <tfoot>
                 <tr style={{ background: "#f8fafc", fontWeight: 800, borderTop: "2px solid #0b2545" }}>
-                  <td colSpan={8} style={{ padding: "8px 12px", textAlign: "right", color: "#0b2545" }}>Total Turnover</td>
-                  <td style={{ padding: "8px 6px", textAlign: "right", color: "#0b2545" }}>{formatCurrency(totalTurnover)}</td>
-                  <td style={{ padding: "8px 6px", textAlign: "right", color: "#0b2545" }}>Total Brokerage</td>
-                  <td style={{ padding: "8px 6px", textAlign: "right", color: "#16a34a" }}>{formatCurrency(totalBrokerage)}</td>
+                  <td colSpan={8} style={{ padding: "8px 12px", textAlign: "right", color: "#0b2545" }}>Totals</td>
+                  <td style={{ padding: "8px 6px", textAlign: "right", color: "#0b2545" }}>{formatAmount(totalTurnover)}</td>
+                  <td style={{ padding: "8px 6px", textAlign: "right", color: "#0b2545" }}>{formatAmount(totalBrokerage)}</td>
+                  <td style={{ padding: "8px 6px", textAlign: "right", color: isNetProfit ? "#16a34a" : "#dc2626" }}>
+                    {isNetProfit ? "+" : ""}{formatAmount(totalNetPnL)}
+                  </td>
                 </tr>
               </tfoot>
             </table>
@@ -369,18 +375,39 @@ export default function BrokerInvoicePreview({
               <div style={{ background: "#0b2545", color: "#fff", padding: "6px 10px", fontWeight: 800, fontSize: "0.75rem", letterSpacing: "0.08em" }}>
                 AMOUNT SUMMARY
               </div>
-              <div style={{ padding: "12px 10px", display: "grid", gap: 8, fontSize: "0.78rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total Brokerage</span><strong>{formatCurrency(totalBrokerage)}</strong></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total Tax (0.0%)</span><strong>₹0.00</strong></div>
+              <div style={{ padding: "12px 10px", display: "grid", gap: 6, fontSize: "0.78rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Total Brokerage</span>
+                  <strong>{formatCurrency(totalBrokerage)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Total Tax (0.0%)</span>
+                  <strong>₹0.00</strong>
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", paddingTop: 6 }}>
-                  <span>Total Charges (Only Brokerage)</span><strong>{formatCurrency(totalBrokerage)}</strong>
+                  <span>Total Charges</span>
+                  <strong>{formatCurrency(totalBrokerage)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", paddingTop: 6 }}>
+                  <span>Gross P&L</span>
+                  <strong style={{ color: isGrossProfit ? "#16a34a" : "#dc2626" }}>
+                    {isGrossProfit ? "+" : ""}{formatCurrency(totalGrossPnL)}
+                  </strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Net Trading P&L</span>
+                  <strong style={{ color: isNetProfit ? "#16a34a" : "#dc2626" }}>
+                    {isNetProfit ? "+" : ""}{formatCurrency(totalNetPnL)}
+                  </strong>
                 </div>
               </div>
             </div>
 
             <div style={{ background: "#0b2545", color: "#fff", padding: "10px", display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: "0.95rem" }}>
-              <span>GRAND TOTAL</span>
-              <span>{formatCurrency(totalBrokerage)}</span>
+              <span>NET P&L</span>
+              <span style={{ color: isNetProfit ? "#4ade80" : "#f87171" }}>
+                {isNetProfit ? "+" : ""}{formatCurrency(totalNetPnL)}
+              </span>
             </div>
           </div>
         </div>

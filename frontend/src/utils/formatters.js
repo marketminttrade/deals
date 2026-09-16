@@ -109,7 +109,7 @@ export function computeTradePnL(trade) {
     ltp = buyPrice;
   }
 
-  const chargesTotal = Number(trade.charges?.total || 0);
+  const chargesTotal = Number(trade.charges?.total ?? trade.charges?.brokerage ?? 0);
 
   let grossPnL = 0;
   if (hasSell) {
@@ -119,14 +119,17 @@ export function computeTradePnL(trade) {
     grossPnL = side === "buy" ? (ltp - buyPrice) * totalUnits : (buyPrice - ltp) * totalUnits;
   }
 
-  const netPnL = grossPnL - chargesTotal;
+  // Closed statements use the stored financial result, including historical records.
+  if (hasSell && trade.grossPnL != null) grossPnL = Number(trade.grossPnL);
+  grossPnL = Number(grossPnL.toFixed(2));
+  const netPnL = hasSell && trade.netPnL != null ? Number(trade.netPnL) : grossPnL - chargesTotal;
 
   return {
     grossPnL: Number(grossPnL.toFixed(2)),
     netPnL: Number(netPnL.toFixed(2)),
-    pnl: Number(grossPnL.toFixed(2)),
+    pnl: Number(netPnL.toFixed(2)),
     chargesTotal: Number(chargesTotal.toFixed(2)),
     totalUnits,
-    isProfit: grossPnL >= 0,
+    isProfit: netPnL >= 0,
   };
 }

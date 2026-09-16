@@ -1,84 +1,40 @@
+const { invalid, validateFinancialInput } = require("./tradeInput");
+
 function roundCurrency(value) {
   return Number((value || 0).toFixed(2));
 }
 
-/**
- * Calculate trade charges, turnover, and P&L.
- *
- * Unit Rules:
- *  - quantity = Shares for Equity; Number of Lots for Derivatives (Futures/Options/Commodity)
- *  - lotSize = Units per lot (1 for Equity, e.g. 25/50/100 for Derivatives)
- *  - totalUnits = quantity * lotSize
- *
- * Brokerage modes:
- *  - "flat_per_lot" → brokerage = rate * quantity (number of lots)
- *  - "percentage"   → brokerage = turnover * (rate / 100)
- */
+// quantity is shares for equity and lots for derivatives. LTP never creates turnover.
 function calculateCharges(tradeInput) {
-  const quantity = Number(tradeInput.quantity || 0);          // Shares or Lots
-  const lotSize = Number(tradeInput.lotSize || 1);            // Units per lot
-  const totalUnits = quantity * (lotSize > 0 ? lotSize : 1);  // Physical units traded
-
-  const entryPrice = Number(tradeInput.entryPrice ?? tradeInput.buyPrice ?? 0);
-  const exitValue = tradeInput.exitPrice ?? tradeInput.sellPrice;
-  const hasExitPrice = exitValue !== "" && exitValue !== null && exitValue !== undefined;
-  const exitPrice = Number(hasExitPrice ? exitValue : 0);
-
-  // Total Turnover in INR based on physical units
-  const turnover = totalUnits * (entryPrice + (exitPrice || 0));
-  const rate = Number(tradeInput.brokeragePercent || 0);
-
-  // Determine brokerage mode
-  const brokerageMode = tradeInput.brokerageMode;
-  const isFlat =
-    brokerageMode === "flat_per_lot" ||
-    (!brokerageMode && (tradeInput.segment === "options" || tradeInput.segment === "futures" || tradeInput.segment === "commodity")) ||
-    (!brokerageMode && (tradeInput.instrument === "OPTIDX" || tradeInput.instrument === "FUTIDX" || tradeInput.instrument === "FUTSTK"));
-
-  let brokerage = 0;
-  if (isFlat) {
-    // Flat rate per lot: ₹Rate * quantity (lots)
-    brokerage = rate * quantity;
-  } else {
-    // Percentage rate: % of turnover
-    brokerage = turnover * (rate / 100);
+  const input = validateFinancialInput(tradeInput);
+  const { quantity, lotSize, entryPrice, exitPrice, ltp, side, brokerageMode } = input;
+  const totalUnits = quantity * lotSize;
+  const hasExitPrice = exitPrice !== undefined;
+  const entryValue = totalUnits * entryPrice;
+  const exitValue = totalUnits * (exitPrice ?? 0);
+  const turnover = entryValue + exitValue;
+  const rate = input.brokeragePercent;
+  let brokerage;
+  switch (brokerageMode) {
+    case "flat_per_lot": brokerage = rate * quantity; break;
+    case "flat_per_order": brokerage = rate * (hasExitPrice ? 2 : 1); break;
+    case "paisa_per_share": brokerage = side === "sell" || hasExitPrice ? totalUnits * rate / 100 : 0; break;
+    default: brokerage = turnover * rate / 100;
   }
-
-  const gst = 0;
-  const exchangeFee = 0;
-  const sebiFee = 0;
-  const stampDuty = 0;
-  const totalCharges = brokerage + gst + exchangeFee + sebiFee + stampDuty;
-
-  let grossPnL = 0;
-  if (hasExitPrice) {
-    grossPnL =
-      tradeInput.side === "buy"
-        ? (exitPrice - entryPrice) * totalUnits
-        : (entryPrice - exitPrice) * totalUnits;
-  } else {
-    const ltpPrice = Number(tradeInput.ltp ?? entryPrice ?? 0);
-    grossPnL =
-      tradeInput.side === "buy"
-        ? (ltpPrice - entryPrice) * totalUnits
-        : (entryPrice - ltpPrice) * totalUnits;
+  const gross = ((hasExitPrice ? exitPrice : ltp) - entryPrice) * totalUnits * (side === "buy" ? 1 : -1);
+  if ([turnover, brokerage, gross].some((amount) => !Number.isFinite(amount) || Math.abs(amount) > Number.MAX_SAFE_INTEGER / 100)) {
+    invalid("Trade amounts exceed the supported currency range.");
   }
-
-  const netPnL = grossPnL - totalCharges;
-
+  brokerage = roundCurrency(brokerage);
+  const grossPnL = roundCurrency(gross);
   return {
     totalUnits,
+    totalBuy: roundCurrency(side === "buy" ? entryValue : exitValue),
+    totalSell: roundCurrency(side === "sell" ? entryValue : exitValue),
     turnover: roundCurrency(turnover),
-    charges: {
-      brokerage: roundCurrency(brokerage),
-      gst: roundCurrency(gst),
-      exchangeFee: roundCurrency(exchangeFee),
-      sebiFee: roundCurrency(sebiFee),
-      stampDuty: roundCurrency(stampDuty),
-      total: roundCurrency(totalCharges),
-    },
-    grossPnL: roundCurrency(grossPnL),
-    netPnL: roundCurrency(netPnL),
+    charges: { brokerage, gst: 0, exchangeFee: 0, sebiFee: 0, stampDuty: 0, total: brokerage },
+    grossPnL,
+    netPnL: roundCurrency(grossPnL - brokerage),
   };
 }
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { brokerApi } from "../../api/client";
+import { buildExistingKycForm, kycFileFields } from "../../utils/clientKyc";
 
 // ── Icons ─────────────────────────────────────────────────────────────
 const BackIcon = () => (
@@ -91,12 +92,14 @@ function formatFileSize(bytes = 0) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function NewClientAddWizard({ onComplete, onCancel }) {
+export default function NewClientAddWizard({ customer = null, onComplete, onCancel: onCancelWizard }) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [savedClient, setSavedClient] = useState(customer);
+  const onCancel = () => onCancelWizard(savedClient);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     firstName: "",
     lastName: "",
     fatherName: "",
@@ -135,11 +138,15 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
     nationality: "Indian",
     pep: "No",
     sourceOfFunds: "Salary",
-  });
+    ...buildExistingKycForm(customer),
+  }));
 
   const updateField = (field, value) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
+      if (field === "panNumber") next.panVerified = false;
+      if (field === "aadhaarNumber") next.aadhaarVerified = false;
+      if (field === "phone") next.mobileVerified = false;
       if (field === "firstName" || field === "lastName") {
         const fn = field === "firstName" ? value : prev.firstName;
         const ln = field === "lastName" ? value : prev.lastName;
@@ -173,17 +180,20 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
   const validateStep = (currentStep) => {
     setError("");
     if (currentStep === 1) {
+      if (!formData.clientCode.trim()) { setError("Client Code is required."); return false; }
       if (!formData.firstName.trim()) { setError("First Name is required."); return false; }
       if (!formData.lastName.trim()) { setError("Last Name is required."); return false; }
       if (!formData.fatherName.trim()) { setError("Father/Husband Name is required."); return false; }
       if (!formData.dob) { setError("Date of Birth is required."); return false; }
       if (!formData.gender) { setError("Gender is required."); return false; }
       if (!formData.panNumber.trim()) { setError("PAN Number is required."); return false; }
+      if (!formData.aadhaarNumber.trim()) { setError("Aadhaar Number is required."); return false; }
+      if (!Number.isFinite(Number(formData.initialDeposit)) || Number(formData.initialDeposit) < 0) { setError("Initial deposit must be a nonnegative number."); return false; }
       if (!formData.occupation) { setError("Occupation is required."); return false; }
       if (!formData.annualIncome) { setError("Annual Income is required."); return false; }
       if (!formData.address.trim()) { setError("Address is required."); return false; }
-      if (!formData.state) { setError("State is required."); return false; }
-      if (!formData.city) { setError("City is required."); return false; }
+      if (!formData.state.trim()) { setError("State is required."); return false; }
+      if (!formData.city.trim()) { setError("City is required."); return false; }
       if (!formData.pincode.trim()) { setError("Pincode is required."); return false; }
     } else if (currentStep === 2) {
       if (!formData.phone.trim()) { setError("Mobile Number is required."); return false; }
@@ -205,6 +215,10 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
   };
 
   async function handleFinalSubmit() {
+    if (saving) return;
+    for (const requiredStep of [1, 2, 3]) {
+      if (!validateStep(requiredStep)) { setStep(requiredStep); return; }
+    }
     setSaving(true);
     setError("");
 
@@ -212,8 +226,8 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
 
     const payload = {
       fullName: calculatedFullName,
-      clientCode: formData.clientCode,
-      idCode: formData.clientCode,
+      clientCode: formData.clientCode.trim().toUpperCase(),
+      idCode: formData.clientCode.trim().toUpperCase(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
       address: formData.address.trim(),
@@ -226,8 +240,8 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
         gender: formData.gender.toLowerCase(),
         occupation: formData.occupation,
         annualIncome: formData.annualIncome,
-        state: formData.state,
-        city: formData.city,
+        state: formData.state.trim(),
+        city: formData.city.trim(),
         pincode: formData.pincode.trim(),
         alternatePhone: formData.alternatePhone.trim(),
         preferredCommunication: formData.preferredCommunication,
@@ -245,7 +259,6 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
         nationality: formData.nationality,
         pep: formData.pep,
         sourceOfFunds: formData.sourceOfFunds,
-        status: "verified",
         panFilename: formData.panFile?.name || "",
         panSize: formData.panFile?.size || 0,
         aadhaarFilename: formData.aadhaarFrontFile?.name || "",
@@ -256,18 +269,21 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
     };
 
     try {
-      const res = await brokerApi.post("/api/broker-portal/clients", payload);
+      const res = savedClient?._id
+        ? await brokerApi.patch(`/api/broker-portal/clients/${savedClient._id}`, payload)
+        : await brokerApi.post("/api/broker-portal/clients", payload);
       let updatedClient = res.data;
+      setSavedClient(updatedClient);
       const clientId = updatedClient._id;
 
       // Upload document files if provided
       const uploadsToRun = [
-        { fileObj: formData.panFile, docType: "panImage" },
-        { fileObj: formData.aadhaarFrontFile, docType: "aadhaarFront" },
-        { fileObj: formData.aadhaarBackFile, docType: "aadhaarBack" },
-        { fileObj: formData.customerPhotoFile, docType: "customerPhoto" },
-        { fileObj: formData.customerSignatureFile, docType: "customerSignature" },
-        { fileObj: formData.addressProofFile, docType: "addressProof" },
+        { field: "panFile", fileObj: formData.panFile, docType: "panImage" },
+        { field: "aadhaarFrontFile", fileObj: formData.aadhaarFrontFile, docType: "aadhaarFront" },
+        { field: "aadhaarBackFile", fileObj: formData.aadhaarBackFile, docType: "aadhaarBack" },
+        { field: "customerPhotoFile", fileObj: formData.customerPhotoFile, docType: "customerPhoto" },
+        { field: "customerSignatureFile", fileObj: formData.customerSignatureFile, docType: "customerSignature" },
+        { field: "addressProofFile", fileObj: formData.addressProofFile, docType: "addressProof" },
       ];
 
       for (const item of uploadsToRun) {
@@ -281,13 +297,16 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
           );
           if (uploadRes.data) {
             updatedClient = uploadRes.data;
+            setSavedClient(updatedClient);
+            const uploadedUrl = updatedClient.kyc?.[kycFileFields[item.field]];
+            setFormData((previous) => ({ ...previous, [item.field]: { name: item.fileObj.name, size: item.fileObj.size, url: uploadedUrl } }));
           }
         }
       }
 
-      if (onComplete) onComplete(updatedClient);
+      if (onComplete) await onComplete(updatedClient);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create client.");
+      setError(`${err.response?.data?.message || "Unable to save KYC."} You can retry; any saved client and uploaded documents will be reused.`);
     } finally {
       setSaving(false);
     }
@@ -303,13 +322,14 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
 
   return (
     <div className="bp-wizard-container">
+      <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       {/* ── Top Header Bar ── */}
       <div className="bp-wizard-header">
         <button type="button" className="bp-drawer-back" onClick={onCancel} aria-label="Back">
           <BackIcon />
         </button>
         <div>
-          <h1 className="bp-wizard-title">New Client Add</h1>
+          <h1 className="bp-wizard-title">{savedClient?._id ? "Complete / Update KYC" : "New Client Registration"}</h1>
           <p className="bp-wizard-sub">Add client details to get started</p>
         </div>
       </div>
@@ -412,11 +432,11 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
                 />
               </div>
             </div>
-            <div className="bp-input-group is-readonly">
+            <div className="bp-input-group">
               <div className="bp-input-icon"><IdBadgeIcon /></div>
               <div className="bp-input-wrapper">
-                <label>Client Code (Auto)</label>
-                <input type="text" value={formData.clientCode} readOnly />
+                <label htmlFor="kyc-client-code">Client Code</label>
+                <input id="kyc-client-code" type="text" value={formData.clientCode} onChange={(e) => updateField("clientCode", e.target.value.toUpperCase())} />
               </div>
             </div>
           </div>
@@ -476,7 +496,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
           <div className="bp-input-group">
             <div className="bp-input-icon"><FingerprintIcon /></div>
             <div className="bp-input-wrapper">
-              <label>Aadhaar Number</label>
+                <label>Aadhaar Number *</label>
               <input
                 type="text"
                 placeholder="Enter Aadhaar number"
@@ -554,33 +574,20 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               <div className="bp-input-icon"><MapPinIcon /></div>
               <div className="bp-input-wrapper">
                 <label>State *</label>
-                <select
+                <input type="text" placeholder="Enter state"
                   value={formData.state}
                   onChange={(e) => updateField("state", e.target.value)}
-                >
-                  <option value="">Select state</option>
-                  <option value="Gujarat">Gujarat</option>
-                  <option value="Maharashtra">Maharashtra</option>
-                  <option value="Delhi">Delhi</option>
-                  <option value="Rajasthan">Rajasthan</option>
-                </select>
+                />
               </div>
             </div>
             <div className="bp-input-group">
               <div className="bp-input-icon"><CityIcon /></div>
               <div className="bp-input-wrapper">
                 <label>City *</label>
-                <select
+                <input type="text" placeholder="Enter city"
                   value={formData.city}
                   onChange={(e) => updateField("city", e.target.value)}
-                >
-                  <option value="">Select city</option>
-                  <option value="Ahmedabad">Ahmedabad</option>
-                  <option value="Rajkot">Rajkot</option>
-                  <option value="Surat">Surat</option>
-                  <option value="Vadodara">Vadodara</option>
-                  <option value="Mumbai">Mumbai</option>
-                </select>
+                />
               </div>
             </div>
             <div className="bp-input-group">
@@ -863,7 +870,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("customerPhotoFile", e)} hidden />
+                <input type="file" aria-label="Upload customer photo" accept="image/*" onChange={(e) => handleFileUpload("customerPhotoFile", e)} hidden />
                 <span>Click to upload Customer Photograph</span>
               </label>
             )}
@@ -892,7 +899,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("customerSignatureFile", e)} hidden />
+                <input type="file" aria-label="Upload customer signature" accept="image/*" onChange={(e) => handleFileUpload("customerSignatureFile", e)} hidden />
                 <span>Click to upload Customer Signature</span>
               </label>
             )}
@@ -932,7 +939,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("panFile", e)} hidden />
+                <input type="file" aria-label="Upload PAN" accept="image/*" onChange={(e) => handleFileUpload("panFile", e)} hidden />
                 <span>Click to upload PAN Card image</span>
               </label>
             )}
@@ -971,7 +978,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("aadhaarFrontFile", e)} hidden />
+                <input type="file" aria-label="Upload Aadhaar front" accept="image/*" onChange={(e) => handleFileUpload("aadhaarFrontFile", e)} hidden />
                 <span>Click to upload Aadhaar Front Image</span>
               </label>
             )}
@@ -1000,7 +1007,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("aadhaarBackFile", e)} hidden />
+                <input type="file" aria-label="Upload Aadhaar back" accept="image/*" onChange={(e) => handleFileUpload("aadhaarBackFile", e)} hidden />
                 <span>Click to upload Aadhaar Back Image</span>
               </label>
             )}
@@ -1049,7 +1056,7 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               </div>
             ) : (
               <label className="bp-file-dropzone">
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload("addressProofFile", e)} hidden />
+                <input type="file" aria-label="Upload address proof" accept="image/*" onChange={(e) => handleFileUpload("addressProofFile", e)} hidden />
                 <span>Click to upload Address Proof image</span>
               </label>
             )}
@@ -1348,11 +1355,12 @@ export default function NewClientAddWizard({ onComplete, onCancel }) {
               ← Back
             </button>
             <button type="button" className="bp-btn-solid" disabled={saving} onClick={handleFinalSubmit}>
-              {saving ? "Adding..." : "+ Add Client"}
+              {saving ? "Saving..." : savedClient?._id ? "Save KYC" : "+ Add Client"}
             </button>
           </div>
         </div>
       )}
+      </fieldset>
     </div>
   );
 }

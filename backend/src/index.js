@@ -7,7 +7,6 @@ const multer = require("multer");
 
 const { connectDatabase } = require("./config/database");
 const { seedAdminUser } = require("./services/seedService");
-const { recalculateExistingTrades } = require("./services/recalculateTradesService");
 
 const authRoutes = require("./routes/authRoutes");
 const brokerAuthRoutes = require("./routes/brokerAuthRoutes");
@@ -90,13 +89,17 @@ app.use((err, req, res, next) => {
   }
 
   if (err.code === 11000) {
-    const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
+    const duplicateField = Object.keys(err.keyPattern || {}).find((key) => key !== "brokerId") || "field";
     return res.status(409).json({ message: `${duplicateField} already exists.` });
   }
 
   if (err.name === "ValidationError") {
     const firstMessage = Object.values(err.errors || {})[0]?.message || "Validation failed.";
     return res.status(400).json({ message: firstMessage });
+  }
+
+  if (err.name === "TradeInputError") {
+    return res.status(400).json({ message: err.message });
   }
 
   return res.status(500).json({
@@ -110,7 +113,6 @@ app.use((err, req, res, next) => {
 async function startServer() {
   await connectDatabase();
   await seedAdminUser();
-  await recalculateExistingTrades();
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Broker platform API running on http://0.0.0.0:${PORT}`);

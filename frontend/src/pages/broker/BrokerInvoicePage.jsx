@@ -60,6 +60,7 @@ function downloadBrokerInvoiceExcel({ broker, client, trades, summary, statement
   lines.push("");
   lines.push(`TOTAL TURNOVER,${summary?.totalBuy || summary?.turnover || 0}`);
   lines.push(`TOTAL BROKERAGE,${summary?.totalBrokerage || 0}`);
+  lines.push(`GROSS P&L,${summary?.grossPnL || 0}`);
   lines.push(`NET P&L,${summary?.netPnL || 0}`);
 
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });

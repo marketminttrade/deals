@@ -13,13 +13,6 @@ function formatFullDateTime(dateValue) {
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) + ", " + date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
-function formatTimeOnly(dateValue) {
-  if (!dateValue) return "10:45 AM";
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "10:45 AM";
-  return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
-}
-
 function tradeModeLabel(m) {
   return m === "mis" ? "MIS" : m === "nrml" ? "NRML" : "CNC";
 }
@@ -185,13 +178,17 @@ function TradeDetailPage({ trade, onBack }) {
   const pnlObj = computeTradePnL(currentTrade);
   const grossPnL = pnlObj.grossPnL;
   const charges = currentTrade.charges || {};
-  const totalCharges = Number(charges.total || charges.brokerage || currentTrade.brokeragePercent || 20);
+  const totalCharges = Number(charges.total ?? charges.brokerage ?? 0);
   const realisedPnL = pnlObj.netPnL !== undefined ? pnlObj.netPnL : (grossPnL - totalCharges);
   const isGrossProfit = grossPnL >= 0;
   const isNetProfit = realisedPnL >= 0;
   const buyPrice = currentTrade.buyPrice ?? currentTrade.entryPrice ?? 0;
   const sellPrice = currentTrade.sellPrice ?? currentTrade.exitPrice;
   const hasSell = sellPrice !== null && sellPrice !== undefined && sellPrice !== "";
+  const buyExecuted = currentTrade.side !== "sell" || hasSell;
+  const sellExecuted = currentTrade.side === "sell" || hasSell;
+  const actualBuyPrice = currentTrade.side === "sell" ? sellPrice : buyPrice;
+  const actualSellPrice = currentTrade.side === "sell" ? buyPrice : sellPrice;
 
   const exchangeTag = currentTrade.instrument === "EQUITY" ? "NSE" : (currentTrade.segment === "commodity" ? "MCX" : "NFO");
   const totalUnits = Number(currentTrade.quantity || 1) * Number(currentTrade.lotSize || 1);
@@ -285,7 +282,7 @@ function TradeDetailPage({ trade, onBack }) {
     { icon: <WaveIcon />, label: "Instrument", val: currentTrade.instrument || "EQUITY", boxClass: "bp-detail-icon" },
     {
       icon: <UpArrowIcon />,
-      label: "Avg. Buy Price",
+      label: currentTrade.side === "sell" ? "Entry Sell Price" : "Entry Buy Price",
       val: Number(buyPrice).toFixed(2),
       boxClass: "bp-detail-icon bp-detail-icon--green",
       valueStyle: { color: "var(--bp-green)", fontWeight: 700 }
@@ -301,7 +298,7 @@ function TradeDetailPage({ trade, onBack }) {
         }]
       : [{
           icon: <DownArrowIcon />,
-          label: "Avg. Sell Price",
+          label: currentTrade.side === "sell" ? "Exit Buy Price" : "Exit Sell Price",
           val: Number(sellPrice).toFixed(2),
           boxClass: "bp-detail-icon bp-detail-icon--red",
           valueStyle: { color: "var(--bp-red)", fontWeight: 700 }
@@ -364,7 +361,7 @@ function TradeDetailPage({ trade, onBack }) {
               </span>
             </div>
             <span style={{ fontSize: "0.76rem", color: "var(--bp-muted)", fontWeight: 500 }}>
-              {currentTrade.status === "closed" || hasSell ? `Closed on ${formatTimeOnly(currentTrade.tradedAt)}` : `Traded on ${formatTimeOnly(currentTrade.tradedAt)}`}
+              Trade date: {formatDate(currentTrade.tradedAt)}
             </span>
           </div>
 
@@ -379,7 +376,7 @@ function TradeDetailPage({ trade, onBack }) {
               boxShadow: "0 1px 4px rgba(0,0,0,0.03)"
             }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--bp-muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                Net P&L
+                Gross P&L
               </span>
               <span className={`bp-card-val ${isGrossProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
                 {isGrossProfit ? "+" : ""}{formatCurrency(grossPnL)}
@@ -407,7 +404,7 @@ function TradeDetailPage({ trade, onBack }) {
               boxShadow: "0 1px 4px rgba(0,0,0,0.03)"
             }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--bp-muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                Realised P&L
+                {hasSell ? "Net P&L" : "Net P&L (Unrealized)"}
               </span>
               <span className={`bp-card-val ${isNetProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
                 {isNetProfit ? "+" : ""}{formatCurrency(realisedPnL)}
@@ -451,32 +448,27 @@ function TradeDetailPage({ trade, onBack }) {
               </span>
               <div className="bp-order-card__badge-row">
                 <span className="bp-badge bp-badge--complete" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
-                  {currentTrade.orderTimeline?.buyOrderStatus || "COMPLETE"}
+                  {buyExecuted ? "COMPLETE" : "OPEN"}
                 </span>
               </div>
               <div className="bp-order-card__footer">
-                <span>Qty. {totalUnits} · Price ₹{Number(buyPrice).toFixed(2)}</span>
+                <span>Qty. {totalUnits} · Price {buyExecuted ? `₹${Number(actualBuyPrice).toFixed(2)}` : "–"}</span>
                 <ChevronRight />
               </div>
             </div>
 
             {/* Sell Order Card */}
             <div
-              className="bp-order-card bp-order-card--editable"
-              onClick={() => setEditingType("sell")}
+              className="bp-order-card"
             >
               <span className="bp-order-card__title is-red">Sell Order</span>
-              <span className="bp-order-card__time">
-                {currentTrade.orderTimeline?.sellOrderTime ? formatFullDateTime(currentTrade.orderTimeline.sellOrderTime) : (hasSell ? formatDate(currentTrade.tradedAt) : "–")}
-              </span>
               <div className="bp-order-card__badge-row">
                 <span className="bp-badge bp-badge--complete" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
-                  {hasSell ? (currentTrade.orderTimeline?.sellOrderStatus || "COMPLETE") : "OPEN"}
+                  {sellExecuted ? "COMPLETE" : "OPEN"}
                 </span>
               </div>
               <div className="bp-order-card__footer">
-                <span>Qty. {totalUnits} · Price {hasSell ? `₹${Number(sellPrice).toFixed(2)}` : "–"}</span>
-                <ChevronRight />
+                <span>Qty. {totalUnits} · Price {sellExecuted ? `₹${Number(actualSellPrice).toFixed(2)}` : "–"}</span>
               </div>
             </div>
           </div>
@@ -488,7 +480,7 @@ function TradeDetailPage({ trade, onBack }) {
           <div className="bp-charges-card">
             <div className="bp-charge-row">
               <span>Brokerage</span>
-              <span>{formatCurrency(charges.brokerage || 20)}</span>
+              <span>{formatCurrency(charges.brokerage ?? 0)}</span>
             </div>
             <div className="bp-charge-row">
               <span>Exchange Charges</span>
@@ -508,7 +500,7 @@ function TradeDetailPage({ trade, onBack }) {
             </div>
             <div className="bp-charge-row is-total">
               <span>Total Charges</span>
-              <span>{formatCurrency(charges.total || (charges.brokerage || 20))}</span>
+              <span>{formatCurrency(totalCharges)}</span>
             </div>
           </div>
         </div>
@@ -525,10 +517,10 @@ function TradeDetailPage({ trade, onBack }) {
       </div>
 
       {/* ── Time Edit Modal Popup ── */}
-      {editingType && (
+      {editingType === "buy" && (
         <EditOrderTimeModal
           type={editingType}
-          currentTime={editingType === "buy" ? currentTrade.orderTimeline?.buyOrderTime : currentTrade.orderTimeline?.sellOrderTime}
+          currentTime={currentTrade.orderTimeline?.buyOrderTime}
           onClose={() => setEditingType(null)}
           onSave={handleSaveOrderTime}
         />
@@ -581,7 +573,7 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
         {/* Row 1 */}
         <div className="bp-position-row bp-position-row--1">
           <span>Qty. {trade.status === "closed" ? 0 : (Number(trade.quantity || 1) * Number(trade.lotSize || 1))}</span>
-          <span>Sell Avg. {hasSell ? Number(sellPrice).toFixed(2) : "–"}</span>
+          <span>Exit Avg. {hasSell ? Number(sellPrice).toFixed(2) : "–"}</span>
           <span className="bp-order-mode-tag">{tradeModeText}</span>
         </div>
 
@@ -596,7 +588,7 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
         {/* Row 3 */}
         <div className="bp-position-row bp-position-row--3">
           <span>{exchangeTag}</span>
-          <span>Buy Avg. {Number(buyPrice).toFixed(2)}</span>
+          <span>Entry Avg. {Number(buyPrice).toFixed(2)}</span>
           <span style={{ color: trade.ltpColor === "red" ? "var(--bp-red)" : (trade.ltpColor === "green" ? "var(--bp-green)" : "inherit") }}>
             LTP {Number(ltp).toFixed(2)}
           </span>

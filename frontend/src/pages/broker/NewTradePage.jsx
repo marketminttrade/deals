@@ -56,7 +56,7 @@ const GearIcon = () => (
 
 const ReceiptIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--bp-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
+    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
     <line x1="8" y1="6" x2="16" y2="6" />
     <line x1="8" y1="10" x2="16" y2="10" />
     <line x1="8" y1="14" x2="12" y2="14" />
@@ -73,13 +73,6 @@ const DocumentIcon = () => (
   </svg>
 );
 
-const EditPencilIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-  </svg>
-);
-
 const InfoCircleIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--bp-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
@@ -88,7 +81,6 @@ const InfoCircleIcon = () => (
   </svg>
 );
 
-// Trade Category Icons
 const EquityIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="18" y1="20" x2="18" y2="10" />
@@ -119,7 +111,6 @@ const CommodityIcon = () => (
   </svg>
 );
 
-// Helper to keep Product Type valid per Trade Type
 function getValidProductType(tradeType, productType) {
   if (productType === "Delivery (CNC)" || productType === "Intraday (MIS)" || productType === "Normal (NRML)") {
     return productType;
@@ -254,6 +245,13 @@ function formatForDatetimeInput(val) {
   return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
 }
 
+const brokerageModes = {
+  percentage: { label: "Percentage (%)", unit: "%", defaultRate: "0.10", help: "Applied to executed entry and exit turnover. LTP is excluded." },
+  paisa_per_share: { label: "Paisa / share (sell only)", unit: "paisa", defaultRate: "", help: "Charged once on sold equity shares, including sell-first trades." },
+  flat_per_lot: { label: "Flat ₹ / lot", unit: "₹", defaultRate: "20.00", help: "Rate × number of lots, once per trade." },
+  flat_per_order: { label: "Flat ₹ / executed order", unit: "₹", defaultRate: "20.00", help: "One charge on entry; two charges after exit." },
+};
+
 const initialTradeForm = {
   clientId: "",
   tradeType: "Equity",
@@ -276,10 +274,10 @@ const initialTradeForm = {
   stopLoss: "",
   target: "",
   validity: "DAY",
-  brokeragePerOrder: "20.00",
+  brokerageMode: "percentage",
+  brokerageRate: "0.10",
   tradedAt: todayDateString(),
-  buyOrderTime: formatForDatetimeInput(new Date()),
-  sellOrderTime: "",
+  buyOrderTime: "",
 };
 
 export default function NewTradePage() {
@@ -290,13 +288,13 @@ export default function NewTradePage() {
   const isEditing = Boolean(tradeId);
 
   const [clients, setClients] = useState([]);
-  const [form, setForm] = useState(initialTradeForm);
+  const [form, setForm] = useState(() => ({ ...initialTradeForm, tradedAt: todayDateString() }));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showClientModal, setShowClientModal] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [editBrokerageActive, setEditBrokerageActive] = useState(false);
+  const [existingTimeline, setExistingTimeline] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -311,6 +309,7 @@ export default function NewTradePage() {
           const allTrades = trRes.data?.trades || trRes.data || [];
           const tradeToEdit = allTrades.find((t) => t._id === tradeId);
           if (tradeToEdit) {
+            setExistingTimeline(tradeToEdit.orderTimeline || null);
             let type = "Equity";
             if (tradeToEdit.instrument === "OPTIDX" || tradeToEdit.segment === "options") type = "Options";
             else if (tradeToEdit.instrument === "FUTSTK" || tradeToEdit.instrument === "FUTIDX" || tradeToEdit.segment === "futures") type = "Futures";
@@ -342,10 +341,10 @@ export default function NewTradePage() {
               stopLoss: "",
               target: "",
               validity: "DAY",
-              brokeragePerOrder: String(tradeToEdit.brokeragePercent ?? "20.00"),
+              brokerageMode: tradeToEdit.brokerageMode || (type === "Equity" ? "percentage" : "flat_per_lot"),
+              brokerageRate: String(tradeToEdit.brokeragePercent ?? 0),
               tradedAt: tradeToEdit.tradedAt ? tradeToEdit.tradedAt.slice(0, 10) : todayDateString(),
               buyOrderTime: formatForDatetimeInput(tradeToEdit.orderTimeline?.buyOrderTime || tradeToEdit.tradedAt),
-              sellOrderTime: formatForDatetimeInput(tradeToEdit.orderTimeline?.sellOrderTime),
             });
           }
         } else if (clientList.length > 0) {
@@ -367,7 +366,8 @@ export default function NewTradePage() {
   }, [clients, form.clientId, selectedClient]);
 
   const handleTradeTypeChange = (type) => {
-    let updates = { tradeType: type };
+    const mode = type === "Equity" ? "percentage" : "flat_per_lot";
+    let updates = { tradeType: type, brokerageMode: mode, brokerageRate: brokerageModes[mode].defaultRate };
     if (type === "Equity") {
       updates.exchange = "NSE";
       updates.productType = "Delivery (CNC)";
@@ -411,6 +411,10 @@ export default function NewTradePage() {
       setError("Please enter a valid Buy/Entry Price.");
       return;
     }
+    if (String(form.brokerageRate).trim() === "" || !Number.isFinite(Number(form.brokerageRate)) || Number(form.brokerageRate) < 0 || (form.brokerageMode === "percentage" && Number(form.brokerageRate) > 100)) {
+      setError("Enter a valid nonnegative brokerage rate (percentage must not exceed 100).");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -430,8 +434,8 @@ export default function NewTradePage() {
     else if (form.tradeType === "Futures") instrument = "FUTIDX";
     else if (form.tradeType === "Commodity") instrument = "FUTSTK";
 
-    const hasSellPrice = String(form.sellPrice || "").trim() !== "";
-    const sellPriceNum = hasSellPrice ? Number(form.sellPrice) : undefined;
+    const hasSellPrice = String(form.sellPrice ?? "").trim() !== "";
+    const sellPriceNum = hasSellPrice ? Number(form.sellPrice) : null;
 
     const payload = {
       clientId: form.clientId,
@@ -452,15 +456,13 @@ export default function NewTradePage() {
       exitPrice: sellPriceNum,
       ltp: form.ltp !== "" ? Number(form.ltp) : (sellPriceNum ?? Number(form.buyPrice)),
       ltpColor: form.ltpColor || "green",
-      brokeragePercent: Number(form.brokeragePerOrder || 20),
-      brokerageMode: form.tradeType === "Equity" ? "percentage" : "flat_per_lot",
+      brokeragePercent: Number(form.brokerageRate),
+      brokerageMode: form.brokerageMode,
       status: hasSellPrice ? "closed" : "open",
       tradedAt: form.tradedAt || todayDateString(),
       orderTimeline: {
-        buyOrderTime: form.buyOrderTime ? new Date(form.buyOrderTime).toISOString() : new Date().toISOString(),
-        buyOrderStatus: "COMPLETE",
-        sellOrderTime: form.sellOrderTime ? new Date(form.sellOrderTime).toISOString() : (hasSellPrice ? new Date().toISOString() : null),
-        sellOrderStatus: hasSellPrice ? "COMPLETE" : null,
+        ...(existingTimeline || {}),
+        buyOrderTime: form.buyOrderTime ? new Date(form.buyOrderTime).toISOString() : null,
       },
     };
 
@@ -478,7 +480,6 @@ export default function NewTradePage() {
       setSaving(false);
     }
   };
-
   // Ensure current productType matches valid options for active tradeType
   const currentValidProductType = getValidProductType(form.tradeType, form.productType);
 
@@ -951,7 +952,7 @@ export default function NewTradePage() {
             {/* Buy Price, Sell Price & Live LTP */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, width: "100%" }}>
               <div style={{ minWidth: 0 }}>
-                <label className="bp-form-label">Buy Price (₹) *</label>
+                <label className="bp-form-label">{form.side === "sell" ? "Entry Sell Price (₹) *" : "Entry Buy Price (₹) *"}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -966,7 +967,7 @@ export default function NewTradePage() {
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <label className="bp-form-label">Sell Price (₹)</label>
+                <label className="bp-form-label">{form.side === "sell" ? "Exit Buy Price (₹)" : "Exit Sell Price (₹)"}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1038,8 +1039,8 @@ export default function NewTradePage() {
               </div>
             </div>
 
-            {/* Buy Order & Sell Order Execution Timestamps */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
+            {/* Optional buy execution time; sell timestamps are not collected. */}
+            <div style={{ display: "grid", gap: 10, width: "100%" }}>
               <div style={{ minWidth: 0 }}>
                 <label className="bp-form-label">Buy Order Time</label>
                 <input
@@ -1051,16 +1052,6 @@ export default function NewTradePage() {
                 />
               </div>
 
-              <div style={{ minWidth: 0 }}>
-                <label className="bp-form-label">Sell Order Time</label>
-                <input
-                  type="datetime-local"
-                  className="bp-input"
-                  value={form.sellOrderTime}
-                  onChange={(e) => setForm((f) => ({ ...f, sellOrderTime: e.target.value }))}
-                  style={{ width: "100%", boxSizing: "border-box", fontSize: "13px" }}
-                />
-              </div>
             </div>
           </div>
 
@@ -1153,41 +1144,33 @@ export default function NewTradePage() {
                   Brokerage & Charges
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setEditBrokerageActive((v) => !v)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "4px 10px",
-                  borderRadius: 16,
-                  border: "1px solid #0052FF",
-                  background: "transparent",
-                  color: "#0052FF",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                <EditPencilIcon /> {editBrokerageActive ? "Done" : "Edit Brokerage"}
-              </button>
             </div>
 
             <div>
-              <label className="bp-form-label">Brokerage (Per Order) *</label>
+              <label className="bp-form-label" htmlFor="brokerage-mode">Brokerage Mode</label>
+              <select id="brokerage-mode" className="bp-select" value={form.brokerageMode}
+                onChange={(e) => setForm((f) => ({ ...f, brokerageMode: e.target.value, brokerageRate: brokerageModes[e.target.value].defaultRate }))}>
+                {Object.entries(brokerageModes).filter(([mode]) => mode !== "paisa_per_share" || form.tradeType === "Equity").map(([mode, config]) => (
+                  <option key={mode} value={mode}>{config.label}</option>
+                ))}
+              </select>
+              <label className="bp-form-label" htmlFor="brokerage-rate">Brokerage Rate ({brokerageModes[form.brokerageMode]?.unit}) *</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: "15px", fontWeight: 700, color: "#0052FF" }}>₹</span>
+                <span style={{ fontSize: "15px", fontWeight: 700, color: "#0052FF" }}>{brokerageModes[form.brokerageMode]?.unit}</span>
                 <input
+                  id="brokerage-rate"
                   type="number"
                   step="0.01"
+                  min="0"
+                  max={form.brokerageMode === "percentage" ? 100 : undefined}
                   className="bp-input"
                   style={{ flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box" }}
-                  value={form.brokeragePerOrder}
-                  onChange={(e) => setForm((f) => ({ ...f, brokeragePerOrder: e.target.value }))}
+                  value={form.brokerageRate}
+                  onChange={(e) => setForm((f) => ({ ...f, brokerageRate: e.target.value }))}
                   required
                 />
               </div>
+              <p style={{ fontSize: 12, color: "#64748B" }}>{brokerageModes[form.brokerageMode]?.help}</p>
             </div>
 
             {/* Charges Breakdown Grid */}
@@ -1202,7 +1185,7 @@ export default function NewTradePage() {
                   <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "Inter, sans-serif" }}>₹0.00</span>
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#64748B", display: "block" }}>GST (18%)</span>
+                  <span style={{ fontSize: "11px", color: "#64748B", display: "block" }}>GST (0%)</span>
                   <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "Inter, sans-serif" }}>₹0.00</span>
                 </div>
                 <div>
@@ -1288,14 +1271,14 @@ export default function NewTradePage() {
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <span style={{ color: "#64748B", fontSize: "11px", display: "block" }}>Buy Price</span>
+                <span style={{ color: "#64748B", fontSize: "11px", display: "block" }}>Entry Price</span>
                 <strong style={{ color: "#0F172A", display: "block", marginTop: 1 }}>
                   {form.buyPrice ? `₹${Number(form.buyPrice).toFixed(2)}` : "–"}
                 </strong>
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <span style={{ color: "#64748B", fontSize: "11px", display: "block" }}>Sell Price</span>
+                <span style={{ color: "#64748B", fontSize: "11px", display: "block" }}>Exit Price</span>
                 <strong style={{ color: form.sellPrice ? "var(--bp-text, #0F172A)" : "var(--bp-green, #10B981)", display: "block", marginTop: 1 }}>
                   {form.sellPrice ? `₹${Number(form.sellPrice).toFixed(2)}` : "Open Position"}
                 </strong>

@@ -11,6 +11,8 @@
     "multer": "^2.0.2"
   },
   "scripts": {
+    "test": "node --test",
+    "trades:recalculate": "node src/services/recalculateTradesService.js",
     "start": "node --max-old-space-size=380 src/index.js",
     "dev": "nodemon src/index.js"
   },

@@ -7,6 +7,7 @@ import { resolveAssetUrl } from "../../utils/assets";
 import { formatDate } from "../../utils/formatters";
 import NewClientAddWizard from "../../components/kyc/NewClientAddWizard";
 import KycDetailsView from "../../components/kyc/KycDetailsView";
+import { kycStatusLabel } from "../../utils/clientKyc";
 
 // ── Constants ─────────────────────────────────────────────
 const initialForm = {
@@ -508,7 +509,7 @@ function KycVerifiedDetailsScreen({ customer, onBack }) {
 }
 
 // ── KYC Form Details Screen (Matching KYC-fillup.jpeg) ────────────────────────
-function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
+function KycFormSummaryScreen({ customer = {}, kycForm, onBack, onOpenEdit }) {
   const kyc = customer?.kyc || {};
 
   return (
@@ -534,32 +535,32 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
               <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "var(--bp-muted)" }}>Here is the summary of your KYC Form and submitted documents.</p>
             </div>
           </div>
-          <span className="bp-badge bp-badge--verified">✓ Completed</span>
+          <span className={`bp-badge ${kyc.status && kyc.status !== "incomplete" ? "bp-badge--verified" : "bp-badge--inactive"}`}>{kycStatusLabel(kyc.status)}</span>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, paddingTop: 12, borderTop: "1px solid var(--bp-border)" }}>
           <div>
             <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>KYC Form Number</span>
             <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--bp-text)", fontFamily: "Inter, sans-serif", display: "block", marginTop: 2 }}>
-              KYC{customer.clientCode || customer.idCode || "1509394"}
+              {kyc.referenceNumber || "Not generated"}
             </span>
           </div>
           <div>
             <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>Client ID</span>
             <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--bp-text)", fontFamily: "Inter, sans-serif", display: "block", marginTop: 2 }}>
-              {customer.clientCode || customer.idCode || "1509394"}
+              {customer.clientCode || customer.idCode || "–"}
             </span>
           </div>
           <div>
             <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>Submitted On</span>
             <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--bp-text)", display: "block", marginTop: 2 }}>
-              {formatDate(kyc.generatedAt || new Date())}
+              {kyc.submittedAt ? formatDate(kyc.submittedAt) : "–"}
             </span>
           </div>
           <div>
             <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>KYC Status</span>
             <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--bp-green)", display: "block", marginTop: 2 }}>
-              Verified
+              {kycStatusLabel(kyc.status)}
             </span>
           </div>
         </div>
@@ -582,19 +583,19 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
             </div>
             <div>
               <span className="bp-doc-field-label">Date of Birth</span>
-              <span className="bp-doc-field-value">{kyc.dateOfBirth ? formatDate(kyc.dateOfBirth) : "14 Jan 1994"}</span>
+              <span className="bp-doc-field-value">{kyc.dateOfBirth ? formatDate(kyc.dateOfBirth) : "–"}</span>
             </div>
             <div>
               <span className="bp-doc-field-label">Email ID</span>
-              <span className="bp-doc-field-value" style={{ fontSize: "0.82rem" }}>{customer.email || "client@example.com"}</span>
+              <span className="bp-doc-field-value" style={{ fontSize: "0.82rem" }}>{customer.email || "–"}</span>
             </div>
             <div>
               <span className="bp-doc-field-label">Mobile Number</span>
-              <span className="bp-doc-field-value">{customer.phone || "+91 98765 43210"}</span>
+              <span className="bp-doc-field-value">{customer.phone || "–"}</span>
             </div>
             <div>
               <span className="bp-doc-field-label">PAN Number</span>
-              <span className="bp-doc-field-value">{kyc.panNumber || "ABCDE1234F"}</span>
+              <span className="bp-doc-field-value">{kyc.panNumber || "–"}</span>
             </div>
           </div>
         </div>
@@ -613,7 +614,7 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
           <div>
             <span className="bp-doc-field-label">Address</span>
             <span className="bp-doc-field-value" style={{ fontSize: "0.85rem", lineHeight: "1.4" }}>
-              {customer.address || "B/102, Shreeji Residency, Vastral, Ahmedabad, Gujarat - 382418"}
+              {customer.address || "–"}
             </span>
           </div>
         </div>
@@ -630,12 +631,12 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
         </div>
         <div className="bp-doc-accordion-body" style={{ padding: "8px 16px" }}>
           {[
-            { title: "Identity Proof (Aadhaar Card)", sub: maskNumber(kyc.aadhaarNumber || "1234") },
-            { title: "Address Proof (Aadhaar Card)", sub: maskNumber(kyc.aadhaarNumber || "1234") },
-            { title: "PAN Proof", sub: kyc.panNumber || "ABCDE1234F" },
-            { title: "Bank Proof (Cancelled Cheque)", sub: "SBI •••• 5678" },
-            { title: "Photo", sub: `Uploaded on ${formatDate(kyc.generatedAt || new Date())}` },
-            { title: "Signature", sub: `Uploaded on ${formatDate(kyc.generatedAt || new Date())}` },
+            { title: "Aadhaar Front", sub: maskNumber(kyc.aadhaarNumber), uploaded: kyc.aadhaarFrontUrl },
+            { title: "Aadhaar Back", sub: maskNumber(kyc.aadhaarNumber), uploaded: kyc.aadhaarBackUrl },
+            { title: "PAN Proof", sub: kyc.panNumber || "–", uploaded: kyc.panImageUrl },
+            { title: "Bank Proof", sub: kyc.bankName || "–", uploaded: kyc.bankProofUrl },
+            { title: "Photo", sub: "Customer photograph", uploaded: kyc.customerPhotoUrl },
+            { title: "Signature", sub: "Customer signature", uploaded: kyc.customerSignatureUrl },
           ].map((item) => (
             <div key={item.title} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--bp-border)" }}>
               <div>
@@ -643,7 +644,7 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
                 <span style={{ fontSize: "0.78rem", color: "var(--bp-muted)", display: "block", marginTop: 2 }}>{item.sub}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="bp-badge bp-badge--verified">✓ Verified</span>
+                <span className={`bp-badge ${item.uploaded ? "bp-badge--verified" : "bp-badge--inactive"}`}>{item.uploaded ? "Uploaded" : "Pending"}</span>
                 <ChevronRight />
               </div>
             </div>
@@ -666,28 +667,30 @@ function KycFormSummaryScreen({ customer, kycForm, onBack, onOpenEdit }) {
 }
 
 // ── New Client Sheet Form ────────────────────────────────────
-function NewClientSheet({ form, setForm, saving, onSubmit, onClose, isEditing }) {
+function NewClientSheet({ form, setForm, saving, onSubmit, onClose, isEditing, error }) {
   return (
     <>
-      <div className="bp-drawer-overlay" onClick={onClose} />
-      <div className="bp-drawer">
+      <div className="bp-drawer-overlay" onClick={() => !saving && onClose()} />
+      <div className="bp-drawer" role="dialog" aria-modal="true" aria-label={isEditing ? "Edit Client" : "Add New Client"}>
         <div className="bp-drawer-handle" />
         <div className="bp-drawer-header">
-          <button type="button" className="bp-drawer-back" onClick={onClose}><BackIcon /></button>
+          <button type="button" className="bp-drawer-back" disabled={saving} onClick={onClose} aria-label="Close client form"><BackIcon /></button>
           <div className="bp-drawer-title">
             <h2>{isEditing ? "Edit Client" : "Add New Client"}</h2>
             <p>{isEditing ? "Update client information" : "Register a new client"}</p>
           </div>
         </div>
         <form onSubmit={onSubmit} id="bp-client-form">
+          {error && <p role="alert" style={{ padding: "0 16px", color: "var(--bp-red)" }}>{error}</p>}
+          {!isEditing && <p style={{ padding: "0 16px", fontSize: 13 }}>KYC documents can be added later.</p>}
           <div className="bp-form">
             <div>
-              <label className="bp-form-label">Full Name</label>
-              <input className="bp-input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
+              <label className="bp-form-label" htmlFor="client-full-name">Full Name</label>
+              <input id="client-full-name" className="bp-input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
             </div>
             <div>
-              <label className="bp-form-label">Client Code</label>
-              <input className="bp-input" value={form.clientCode} onChange={(e) => setForm({ ...form, clientCode: e.target.value.toUpperCase() })} required />
+              <label className="bp-form-label" htmlFor="client-code">Client Code</label>
+              <input id="client-code" className="bp-input" value={form.clientCode} onChange={(e) => setForm({ ...form, clientCode: e.target.value.toUpperCase() })} required />
             </div>
             <div className="bp-form-row">
               <div>
@@ -732,6 +735,7 @@ export default function BrokerCustomersPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [showClientForm, setShowClientForm] = useState(false);
+  const [wizardCustomer, setWizardCustomer] = useState(null);
 
   // subScreen: "security" (KYC.jpeg) | "details" (KYC-Details.jpeg) | "form-summary" (KYC-fillup.jpeg)
   const [subScreen, setSubScreen] = useState("security");
@@ -768,7 +772,10 @@ export default function BrokerCustomersPage() {
 
   useEffect(() => {
     if (location.state?.activeTab === "create") {
-      setSubScreen("wizard");
+      setEditingCustomerId("");
+      setForm(initialForm);
+      setShowClientForm(true);
+      setSubScreen("security");
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, navigate, location.pathname]);
@@ -787,10 +794,31 @@ export default function BrokerCustomersPage() {
     setError("");
   };
 
+  const openClientForm = (customer = null) => {
+    setEditingCustomerId(customer?._id || "");
+    setForm(customer ? Object.fromEntries(Object.keys(initialForm).map((key) => [key, customer[key] || (key === "clientCode" ? customer.idCode : "") || ""])) : { ...initialForm });
+    setError("");
+    setMessage("");
+    setShowClientForm(true);
+  };
+
+  const openKyc = (customer = null) => {
+    setWizardCustomer(customer);
+    setError("");
+    setMessage("");
+    setSubScreen("wizard");
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
+    if (saving) return;
+    if (!form.fullName.trim() || !form.clientCode.trim()) {
+      setError("Full name and client code are required.");
+      return;
+    }
     setSaving(true); setError(""); setMessage("");
-    const payload = { ...form, idCode: form.clientCode, clientCode: form.clientCode };
+    const clientCode = form.clientCode.trim().toUpperCase();
+    const payload = { ...form, fullName: form.fullName.trim(), idCode: clientCode, clientCode };
     try {
       let saved;
       if (editingCustomerId) {
@@ -834,11 +862,12 @@ export default function BrokerCustomersPage() {
               type="button"
               className="bp-btn-solid"
               style={{ padding: "8px 14px", fontSize: "0.82rem", borderRadius: 20 }}
-              onClick={() => setSubScreen("wizard")}
+              onClick={() => openClientForm()}
               id="bp-add-client-btn"
             >
               <AddIcon /> Add
             </button>
+            <button type="button" className="bp-btn-outline" onClick={() => openKyc()}>Full KYC Registration</button>
           </div>
         </div>
       )}
@@ -846,18 +875,32 @@ export default function BrokerCustomersPage() {
       {error && <div style={{ margin: "10px 12px 0", padding: "12px", background: "var(--bp-red-soft)", borderRadius: "var(--bp-radius)", color: "var(--bp-red)", fontSize: "0.88rem", border: "1px solid rgba(196,100,82,0.2)" }}>{error}</div>}
       {message && <div style={{ margin: "10px 12px 0", padding: "12px", background: "var(--bp-green-soft)", borderRadius: "var(--bp-radius)", color: "var(--bp-green)", fontSize: "0.88rem", border: "1px solid rgba(15,151,114,0.2)" }}>{message}</div>}
 
+      {!loading && subScreen === "security" && selectedClient && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px" }}>
+          <span className="bp-badge">KYC: {kycStatusLabel(selectedClient.kyc?.status)}</span>
+          <button type="button" className="bp-btn-outline" onClick={() => openClientForm(selectedClient)}>Edit Client</button>
+          <button type="button" className="bp-btn-solid" onClick={() => openKyc(selectedClient)}>Complete / Update KYC</button>
+        </div>
+      )}
+
       {loading && <div className="bp-loading"><div className="bp-spinner" /></div>}
 
       {/* ══ Screen 0: 4-Step New Client Add Wizard ══ */}
       {!loading && subScreen === "wizard" && (
         <NewClientAddWizard
+          key={wizardCustomer?._id || "new"}
+          customer={wizardCustomer}
           onComplete={async (createdClient) => {
-            setMessage("Client successfully registered.");
+            setMessage("Client KYC saved.");
             await loadCustomers();
             if (createdClient?._id) setSelectedClient(createdClient);
             setSubScreen("details");
           }}
-          onCancel={() => setSubScreen("security")}
+          onCancel={async (savedClient) => {
+            setSubScreen("security");
+            await loadCustomers();
+            if (savedClient?._id) setSelectedClient(savedClient);
+          }}
         />
       )}
 
@@ -870,7 +913,7 @@ export default function BrokerCustomersPage() {
           onNavigateToDetails={() => setSubScreen("details")}
           onNavigateToForm={() => setSubScreen("form-summary")}
           onDownloadPdf={handleDownloadPdf}
-          onAddNew={() => setSubScreen("wizard")}
+          onAddNew={() => openClientForm()}
         />
       )}
 
@@ -880,7 +923,8 @@ export default function BrokerCustomersPage() {
           customer={selectedClient || customers[0]}
           broker={kycPreview?.broker}
           onBack={() => setSubScreen("security")}
-          onEdit={() => setSubScreen("wizard")}
+          onEdit={() => openKyc(selectedClient || customers[0])}
+          onEditClient={() => openClientForm(selectedClient || customers[0])}
         />
       )}
 
@@ -890,7 +934,7 @@ export default function BrokerCustomersPage() {
           customer={selectedClient || customers[0]}
           kycForm={kycForm}
           onBack={() => setSubScreen("security")}
-          onOpenEdit={() => setSubScreen("wizard")}
+          onOpenEdit={() => openKyc(selectedClient || customers[0])}
         />
       )}
 
@@ -903,6 +947,7 @@ export default function BrokerCustomersPage() {
           onSubmit={handleSubmit}
           onClose={closeForm}
           isEditing={Boolean(editingCustomerId)}
+          error={error}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatDate } from "../../utils/formatters";
 import { downloadCustomerKycPdf } from "../../utils/kycPdf";
+import { kycStatusLabel } from "../../utils/clientKyc";
 
 // ── Icons ─────────────────────────────────────────────────────────────
 const BackIcon = () => (
@@ -53,13 +54,13 @@ function getInitials(name = "") {
   return (parts[0] || "CL").slice(0, 2).toUpperCase();
 }
 
-export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
+export default function KycDetailsView({ customer, broker, onBack, onEdit, onEditClient }) {
   const [viewingDocModal, setViewingDocModal] = useState(null);
 
   const kyc = customer?.kyc || {};
-  const verifiedDateStr = kyc.verifiedAt ? formatDate(kyc.verifiedAt) : kyc.submittedAt ? formatDate(kyc.submittedAt) : "-";
+  const verifiedDateStr = kyc.status === "verified" && kyc.verifiedAt ? formatDate(kyc.verifiedAt) : "-";
   const validTillStr = kyc.validTill ? formatDate(kyc.validTill) : "-";
-  const statusLabel = kyc.status === "verified" || kyc.status === "generated" || kyc.status === "ready" ? "Verified" : "Incomplete";
+  const statusLabel = kycStatusLabel(kyc.status);
 
   const handleDownloadPdf = () => {
     downloadCustomerKycPdf({ broker, client: customer });
@@ -124,20 +125,7 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
     },
   ];
 
-  const historyEvents = kyc.history && kyc.history.length > 0 ? kyc.history : [
-    {
-      title: "KYC Verified",
-      description: "KYC has been successfully verified.",
-      timestamp: verifiedDateStr,
-      iconType: "verify",
-    },
-    {
-      title: "KYC Submitted",
-      description: "KYC documents have been submitted.",
-      timestamp: kyc.submittedAt ? formatDate(kyc.submittedAt) : verifiedDateStr,
-      iconType: "submit",
-    },
-  ];
+  const historyEvents = kyc.history || [];
 
   return (
     <div className="bp-kyc-details-page">
@@ -151,8 +139,9 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
           <p className="bp-wizard-sub">View and manage client KYC information</p>
         </div>
         <button type="button" className="bp-edit-btn" onClick={onEdit}>
-          <EditIcon /> Edit
+          <EditIcon /> Update KYC
         </button>
+        {onEditClient && <button type="button" className="bp-edit-btn" onClick={onEditClient}>Edit Client</button>}
       </div>
 
       {/* Main Profile Header Card */}
@@ -164,7 +153,7 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
           <div className="bp-profile-header-top">
             <span className="bp-profile-name">{customer?.fullName || "-"}</span>
             <span className={`bp-badge ${statusLabel === "Verified" ? "bp-badge--verified" : "bp-badge--inactive"}`}>
-              {statusLabel === "Verified" ? "✓ Verified >" : "Incomplete"}
+              {statusLabel}
             </span>
           </div>
           <span className="bp-profile-code">{customer?.clientCode || customer?.idCode || "-"}</span>
@@ -190,7 +179,7 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
         <div className="bp-metric-card">
           <span className="bp-metric-icon" style={{ background: "#EEF2FF", color: "#4F46E5" }}>🗓</span>
           <span className="bp-metric-label">Submitted On</span>
-          <span className="bp-metric-val">{verifiedDateStr}</span>
+          <span className="bp-metric-val">{kyc.submittedAt ? formatDate(kyc.submittedAt) : "-"}</span>
         </div>
         <div className="bp-metric-card">
           <span className="bp-metric-icon" style={{ background: "#FEF3C7", color: "#D97706" }}>🗓</span>
@@ -216,8 +205,8 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
                 <span className="bp-doc-sub">{doc.filename || doc.sub}</span>
               </div>
               <div className="bp-doc-status-col">
-                <span className={`bp-badge ${doc.url || doc.filename ? "bp-badge--verified" : "bp-badge--inactive"}`}>
-                  {doc.url || doc.filename ? "Uploaded" : "Pending"}
+                <span className={`bp-badge ${doc.url ? "bp-badge--verified" : "bp-badge--inactive"}`}>
+                  {doc.url ? "Uploaded" : "Pending"}
                 </span>
                 <span className="bp-doc-date">{doc.date}</span>
               </div>
@@ -297,12 +286,13 @@ export default function KycDetailsView({ customer, broker, onBack, onEdit }) {
               <div className="bp-timeline-content">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span className="bp-timeline-title">{evt.title}</span>
-                  <span className="bp-timeline-time">{evt.timestamp}</span>
+                  <span className="bp-timeline-time">{formatDate(evt.timestamp)}</span>
                 </div>
                 <p className="bp-timeline-desc">{evt.description}</p>
               </div>
             </div>
           ))}
+          {!historyEvents.length && <p>No KYC activity recorded yet.</p>}
         </div>
       </div>
 

@@ -184,6 +184,8 @@ export async function downloadBrokerInvoicePdf({
     return acc + (t.totalBuy || (buyP * units + sellP * units));
   }, 0);
   const totalBrokerage = summary?.totalBrokerage || invoiceTrades.reduce((acc, t) => acc + (t.charges?.brokerage || t.charges?.total || 0), 0);
+  const totalGrossPnL = summary?.grossPnL !== undefined ? summary.grossPnL : invoiceTrades.reduce((acc, t) => acc + (t.grossPnL || 0), 0);
+  const totalNetPnL = summary?.netPnL !== undefined ? summary.netPnL : invoiceTrades.reduce((acc, t) => acc + (t.netPnL || 0), 0);
   const totalTrades = summary?.totalTrades || invoiceTrades.length;
   const totalQty = invoiceTrades.reduce((acc, t) => acc + (Number(t.quantity || 1) * Number(t.lotSize || 1)), 0);
 
@@ -522,17 +524,17 @@ export async function downloadBrokerInvoicePdf({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(11, 37, 69);
-  doc.text("Total Turnover", margin + 220, y + 11, { align: "right" });
+  doc.text("Totals", margin + 336 - 4, y + 11, { align: "right" });
 
-  doc.setFont("helvetica", "bold");
-  doc.text(formatAmount(totalTurnover), margin + 370, y + 11, { align: "right" });
+  doc.text(formatAmount(totalTurnover), margin + 412 - 4, y + 11, { align: "right" });
+  doc.text(formatAmount(totalBrokerage), margin + 470 - 4, y + 11, { align: "right" });
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Total Brokerage", margin + 440, y + 11, { align: "right" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(22, 163, 74);
-  doc.text(formatAmount(totalBrokerage), margin + usableWidth - 8, y + 11, { align: "right" });
+  if (totalNetPnL >= 0) {
+    doc.setTextColor(22, 163, 74);
+  } else {
+    doc.setTextColor(220, 38, 38);
+  }
+  doc.text(`${totalNetPnL >= 0 ? "+" : ""}${formatAmount(totalNetPnL)}`, margin + usableWidth - 4, y + 11, { align: "right" });
 
   y += 20;
 
@@ -545,13 +547,20 @@ export async function downloadBrokerInvoicePdf({
   y += 14;
 
   // ── 4. MIDDLE BREAKUP SECTION (3 Columns) ──
+  const footerBarY = pageHeight - 26;
+  if (y + 120 > footerBarY - 10) {
+    doc.addPage();
+    y = margin + 10;
+  }
+
   const bColWidth = (usableWidth - colGap * 2) / 3; // ~177pt
+  const midBoxHeight = 110;
 
   // Box 1: CHARGES BREAKUP
   if (showCharges) {
     const b1X = margin;
     doc.setDrawColor(11, 37, 69);
-    doc.roundedRect(b1X, y, bColWidth, 94, 6, 6, "S");
+    doc.roundedRect(b1X, y, bColWidth, midBoxHeight, 6, 6, "S");
 
     doc.setFillColor(11, 37, 69);
     doc.rect(b1X, y, bColWidth, 14, "F");
@@ -571,7 +580,7 @@ export async function downloadBrokerInvoicePdf({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.8);
     chargeItems.forEach((ci, cIdx) => {
-      const cY = y + 25 + cIdx * 11;
+      const cY = y + 25 + cIdx * 12;
       doc.setTextColor(100, 116, 139);
       doc.text(ci.sr, b1X + 8, cY);
       doc.setTextColor(15, 23, 42);
@@ -583,13 +592,13 @@ export async function downloadBrokerInvoicePdf({
     });
 
     doc.setFillColor(248, 250, 252);
-    doc.rect(b1X, y + 78, bColWidth, 16, "F");
+    doc.rect(b1X, y + 92, bColWidth, 18, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.2);
     doc.setTextColor(11, 37, 69);
-    doc.text("Total Charges (Only Brokerage)", b1X + 8, y + 89);
+    doc.text("Total Charges (Only Brokerage)", b1X + 8, y + 104);
     doc.setFont("helvetica", "bold");
-    doc.text(formatAmount(totalBrokerage), b1X + bColWidth - 8, y + 89, { align: "right" });
+    doc.text(formatAmount(totalBrokerage), b1X + bColWidth - 8, y + 104, { align: "right" });
   }
 
   // Box 2: TAX & TRANSACTION SUMMARY
@@ -598,7 +607,7 @@ export async function downloadBrokerInvoicePdf({
 
     // Sub Box A: Tax Summary
     doc.setDrawColor(11, 37, 69);
-    doc.roundedRect(b2X, y, bColWidth, 42, 6, 6, "S");
+    doc.roundedRect(b2X, y, bColWidth, 46, 6, 6, "S");
     doc.setFillColor(11, 37, 69);
     doc.rect(b2X, y, bColWidth, 12, "F");
     doc.setFont("helvetica", "bold");
@@ -609,22 +618,22 @@ export async function downloadBrokerInvoicePdf({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.8);
     doc.setTextColor(100, 116, 139);
-    doc.text("Taxable Value", b2X + 8, y + 22);
+    doc.text("Taxable Value", b2X + 8, y + 23);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 23, 42);
-    doc.text(formatAmount(totalBrokerage), b2X + bColWidth - 8, y + 22, { align: "right" });
+    doc.text(formatAmount(totalBrokerage), b2X + bColWidth - 8, y + 23, { align: "right" });
 
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 116, 139);
-    doc.text("GST (0.0%)", b2X + 8, y + 33);
+    doc.text("GST (0.0%)", b2X + 8, y + 36);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 23, 42);
-    doc.text("0.00", b2X + bColWidth - 8, y + 33, { align: "right" });
+    doc.text("0.00", b2X + bColWidth - 8, y + 36, { align: "right" });
 
     // Sub Box B: Transaction Summary
-    const b2SubY = y + 48;
+    const b2SubY = y + 52;
     doc.setDrawColor(11, 37, 69);
-    doc.roundedRect(b2X, b2SubY, bColWidth, 46, 6, 6, "S");
+    doc.roundedRect(b2X, b2SubY, bColWidth, 58, 6, 6, "S");
     doc.setFillColor(11, 37, 69);
     doc.rect(b2X, b2SubY, bColWidth, 12, "F");
     doc.setFont("helvetica", "bold");
@@ -649,16 +658,23 @@ export async function downloadBrokerInvoicePdf({
 
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 116, 139);
-    doc.text("Total Qty", b2X + 8, b2SubY + 41);
+    doc.text("Total Trades", b2X + 8, b2SubY + 41);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 23, 42);
-    doc.text(String(totalQty), b2X + bColWidth - 8, b2SubY + 41, { align: "right" });
+    doc.text(String(totalTrades), b2X + bColWidth - 8, b2SubY + 41, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text("Total Qty", b2X + 8, b2SubY + 51);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(totalQty), b2X + bColWidth - 8, b2SubY + 51, { align: "right" });
   }
 
   // Box 3: AMOUNT SUMMARY
   const b3X = margin + (bColWidth + colGap) * 2;
   doc.setDrawColor(11, 37, 69);
-  doc.roundedRect(b3X, y, bColWidth, 94, 6, 6, "S");
+  doc.roundedRect(b3X, y, bColWidth, midBoxHeight, 6, 6, "S");
 
   doc.setFillColor(11, 37, 69);
   doc.rect(b3X, y, bColWidth, 14, "F");
@@ -668,37 +684,66 @@ export async function downloadBrokerInvoicePdf({
   doc.text("AMOUNT SUMMARY", b3X + 8, y + 10);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
   doc.setTextColor(100, 116, 139);
-  doc.text("Total Brokerage", b3X + 8, y + 28);
+  doc.text("Total Brokerage", b3X + 8, y + 25);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text(formatAmount(totalBrokerage), b3X + bColWidth - 8, y + 28, { align: "right" });
+  doc.text(formatAmount(totalBrokerage), b3X + bColWidth - 8, y + 25, { align: "right" });
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
-  doc.text("Total Tax (0.0%)", b3X + 8, y + 41);
+  doc.text("Total Tax (0.0%)", b3X + 8, y + 36);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text("0.00", b3X + bColWidth - 8, y + 41, { align: "right" });
+  doc.text("0.00", b3X + bColWidth - 8, y + 36, { align: "right" });
 
   doc.setFont("helvetica", "bold");
   doc.setTextColor(11, 37, 69);
-  doc.text("Total Charges (Only Brokerage)", b3X + 8, y + 58);
+  doc.text("Total Charges", b3X + 8, y + 48);
+  doc.text(formatAmount(totalBrokerage), b3X + bColWidth - 8, y + 48, { align: "right" });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(b3X + 6, y + 53, b3X + bColWidth - 6, y + 53);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.text("Gross P&L", b3X + 8, y + 64);
   doc.setFont("helvetica", "bold");
-  doc.text(formatAmount(totalBrokerage), b3X + bColWidth - 8, y + 58, { align: "right" });
+  if (totalGrossPnL >= 0) {
+    doc.setTextColor(22, 163, 74);
+  } else {
+    doc.setTextColor(220, 38, 38);
+  }
+  doc.text(`${totalGrossPnL >= 0 ? "+" : ""}${formatAmount(totalGrossPnL)}`, b3X + bColWidth - 8, y + 64, { align: "right" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.text("Net Trading P&L", b3X + 8, y + 76);
+  doc.setFont("helvetica", "bold");
+  if (totalNetPnL >= 0) {
+    doc.setTextColor(22, 163, 74);
+  } else {
+    doc.setTextColor(220, 38, 38);
+  }
+  doc.text(`${totalNetPnL >= 0 ? "+" : ""}${formatAmount(totalNetPnL)}`, b3X + bColWidth - 8, y + 76, { align: "right" });
 
   // Grand Total Banner
   doc.setFillColor(11, 37, 69);
-  doc.rect(b3X, y + 76, bColWidth, 18, "F");
+  doc.rect(b3X, y + 92, bColWidth, 18, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("GRAND TOTAL", b3X + 8, y + 88);
+  doc.text("NET P&L", b3X + 8, y + 104);
   doc.setFont("helvetica", "bold");
-  doc.text(formatAmount(totalBrokerage), b3X + bColWidth - 8, y + 88, { align: "right" });
+  if (totalNetPnL >= 0) {
+    doc.setTextColor(74, 222, 128);
+  } else {
+    doc.setTextColor(248, 113, 113);
+  }
+  doc.text(`${totalNetPnL >= 0 ? "+" : ""}${formatAmount(totalNetPnL)}`, b3X + bColWidth - 8, y + 104, { align: "right" });
 
-  y += 106;
+  y += 122;
 
   // ── 5. VALUE PROPOSITION BADGES (4 Columns) ──
   if (showFooter) {
@@ -816,15 +861,18 @@ export async function downloadBrokerInvoicePdf({
     doc.text("Authorized Signatory & Seal", pageWidth - margin, alignY + 36, { align: "right" });
   }
 
-  // ── 7. CLEAN LEGAL FOOTER BAR (Single Line, No Extra Text) ──
-  const footerBarY = pageHeight - 26;
-  doc.setFillColor(11, 37, 69);
-  doc.rect(0, footerBarY, pageWidth, 26, "F");
+  // ── 7. CLEAN LEGAL FOOTER BAR (Single Line, No Extra Text, on all pages) ──
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFillColor(11, 37, 69);
+    doc.rect(0, footerBarY, pageWidth, 26, "F");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(tagline, pageWidth / 2, footerBarY + 16, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(tagline, pageWidth / 2, footerBarY + 16, { align: "center" });
+  }
 
   const safeName = `${clientName}-${invNumber}`.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   doc.save(`${safeName}.pdf`);
