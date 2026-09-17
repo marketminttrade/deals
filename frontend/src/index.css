@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600&display=swap");
 
 :root {
   --bg: #f4f6f8;
@@ -2993,8 +2993,6 @@ img {
    Primary: #0052FF  Profit: #0F9772  Loss: #C46452
    ============================================================ */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-
 :root {
   --bp-blue: #0052FF;
   --bp-blue-dark: #0040cc;
@@ -3062,6 +3060,12 @@ button, input, select, textarea, a {
   box-sizing: border-box;
 }
 
+.bp-page {
+  width: 100%;
+  max-width: 500px;
+  margin-inline: auto;
+}
+
 /* ---- Bottom Nav ---- */
 .bp-bottom-nav {
   position: fixed;
@@ -3076,6 +3080,9 @@ button, input, select, textarea, a {
   height: var(--bp-nav-h);
   padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+  width: 100%;
+  max-width: 500px;
+  margin-inline: auto;
 }
 
 .bp-nav-item {
@@ -3364,6 +3371,19 @@ button, input, select, textarea, a {
 .bp-pnl-split-label { font-size: 0.75rem; color: var(--bp-muted); display: block; }
 .bp-pnl-split-val { font-size: 1rem; font-weight: 600; font-family: 'Inter', sans-serif; display: block; margin-top: 3px; }
 
+.bp-pnl-data-note {
+  margin: 8px 12px 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
 /* ---- Trade / Position Card ---- */
 .bp-position-list {
   margin: 0 12px;
@@ -3554,6 +3574,7 @@ button, input, select, textarea, a {
   overflow-y: auto;
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
+  font-family: "Inter", "Source Sans 3", sans-serif;
 }
 
 /* ---- Capture Optimization for Screenshot / Share ---- */
@@ -3589,6 +3610,24 @@ button, input, select, textarea, a {
   font-weight: 600 !important;
   color: #6B7280 !important;
   margin-top: 2px !important;
+}
+
+.bp-trade-detail-page.is-sharing-capture {
+  position: absolute !important;
+  inset: 0 auto auto 0 !important;
+  width: 500px !important;
+  max-width: 500px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.bp-trade-detail-page.is-sharing-capture .bp-trade-detail-content {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
 }
 
 @media (min-width: 640px) {
@@ -4225,7 +4264,7 @@ button, input, select, textarea, a {
   border: 1.5px solid var(--bp-border);
   background-color: #ffffff;
   color: #0F172A;
-  font-size: 14px;
+  font-size: 1rem;
   font-family: 'Inter', sans-serif;
   outline: none;
   transition: border-color 0.15s ease;
@@ -4251,7 +4290,7 @@ button, input, select, textarea, a {
 .bp-select option {
   background-color: #ffffff !important;
   color: #0F172A !important;
-  font-size: 14px;
+  font-size: inherit;
   padding: 8px;
 }
 

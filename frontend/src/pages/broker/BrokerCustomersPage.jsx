@@ -111,16 +111,12 @@ const EyeIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
 );
 
-const HeadsetIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bp-blue)" strokeWidth="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-);
-
 const QuestionIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
 );
 
 // ── KYC Security & Documents Screen (Matching KYC.jpeg) ───────────────────────
-function KycSecurityScreen({ customers, selectedCustomer, onSelectCustomer, onNavigateToDetails, onNavigateToForm, onDownloadPdf, onAddNew }) {
+function KycSecurityScreen({ customers, selectedCustomer, onSelectCustomer, onNavigateToForm, onDownloadPdf, onAddNew }) {
   return (
     <div style={{ padding: "12px", display: "grid", gap: 12 }}>
       {/* Active Customer Selector Dropdown */}
@@ -251,65 +247,6 @@ function KycSecurityScreen({ customers, selectedCustomer, onSelectCustomer, onNa
           </span>
           <span style={{ display: "block", fontSize: "0.8rem", color: "var(--bp-muted)", marginTop: 2 }}>
             View details of your KYC form
-          </span>
-        </div>
-        <ChevronRight />
-      </button>
-
-      {/* Row 2: Need Help? */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "16px",
-          background: "var(--bp-surface)",
-          border: "1px solid var(--bp-border)",
-          borderRadius: "var(--bp-radius-lg)",
-          boxShadow: "var(--bp-shadow)",
-        }}
-      >
-        <div style={{ width: 42, height: 42, borderRadius: 12, background: "var(--bp-blue-soft)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <HeadsetIcon />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: "0.92rem", fontWeight: 600, color: "var(--bp-text)", fontFamily: "Inter, sans-serif" }}>
-            Need Help?
-          </span>
-          <span style={{ display: "block", fontSize: "0.78rem", color: "var(--bp-muted)", marginTop: 2 }}>
-            If you have any questions or need assistance regarding your KYC.
-          </span>
-        </div>
-        <button type="button" className="bp-btn-outline" style={{ padding: "8px 12px", fontSize: "0.78rem", flexShrink: 0 }}>
-          Contact Support
-        </button>
-      </div>
-
-      {/* Row 3: Privacy Notice */}
-      <button
-        type="button"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "14px 16px",
-          background: "var(--bp-surface)",
-          border: "1px solid var(--bp-border)",
-          borderRadius: "var(--bp-radius-lg)",
-          boxShadow: "var(--bp-shadow)",
-          cursor: "pointer",
-          textAlign: "left",
-          width: "100%",
-        }}
-        onClick={onNavigateToDetails}
-        id="bp-kyc-details-row"
-      >
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--bp-blue-soft)", color: "var(--bp-blue)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <LockIcon />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: "0.82rem", color: "var(--bp-text)", lineHeight: "1.4" }}>
-            Your privacy and security are our top priority. Learn more about our <strong style={{ color: "var(--bp-blue)" }}>Privacy Policy</strong>
           </span>
         </div>
         <ChevronRight />
@@ -910,7 +847,6 @@ export default function BrokerCustomersPage() {
           customers={customers}
           selectedCustomer={selectedClient}
           onSelectCustomer={setSelectedClient}
-          onNavigateToDetails={() => setSubScreen("details")}
           onNavigateToForm={() => setSubScreen("form-summary")}
           onDownloadPdf={handleDownloadPdf}
           onAddNew={() => openClientForm()}

@@ -48,7 +48,7 @@ const brokerNavItems = [
   { to: ACCOUNT_ROUTES.dashboard, label: "Watchlist", Icon: WatchlistIcon, id: "watchlist" },
   { to: ACCOUNT_ROUTES.trades, label: "Orders", Icon: OrdersIcon, id: "orders" },
   { to: "/account/customers", label: "Dashboard", Icon: DashboardIcon, id: "dashboard" },
-  { to: "/account/holdings", label: "Portfolio", Icon: PortfolioIcon, id: "portfolio" },
+  { to: ACCOUNT_ROUTES.portfolio, label: "Portfolio", Icon: PortfolioIcon, id: "portfolio" },
   { to: ACCOUNT_ROUTES.profile, label: null, Icon: AccountIcon, id: "account" },
 ];
 

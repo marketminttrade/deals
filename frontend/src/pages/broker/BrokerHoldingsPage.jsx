@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { brokerApi } from "../../api/client";
 import { useBrokerAuth } from "../../context/BrokerAuthContext";
-import { computeTradePnL, formatCurrency, formatDate } from "../../utils/formatters";
+import { computeTradePnL, formatCurrency, formatDate, summarizeTradePnL } from "../../utils/formatters";
+import { isOpenHolding, isOpenPosition, isTradeOpen } from "../../utils/tradeClassification";
+
+function formatSignedPnl(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  const amount = Number(value);
+  return `${amount >= 0 ? "+" : ""}${formatCurrency(amount)}`;
+}
 
 // ── Icons ─────────────────────────────────────────────────
 const BriefcaseIcon = () => (
@@ -62,7 +69,7 @@ const MoreVerticalIcon = () => (
 );
 
 // ── SVG Sparkline Component ───────────────────────────────
-function Sparkline({ positive = true }) {
+function Sparkline({ positive = true, available = true }) {
   const points = positive
     ? "0,22 12,18 24,20 36,12 48,14 60,6 72,4"
     : "0,6 12,10 24,8 36,18 48,16 60,24 72,26";
@@ -72,7 +79,7 @@ function Sparkline({ positive = true }) {
       <polyline
         points={points}
         fill="none"
-        stroke={positive ? "var(--bp-green)" : "var(--bp-red)"}
+        stroke={!available ? "var(--bp-muted2)" : positive ? "var(--bp-green)" : "var(--bp-red)"}
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -88,13 +95,13 @@ function HoldingCard({ trade, hideValues, onClick }) {
   const isProfit = pnlObj.isProfit;
 
   const avgPrice = Number(trade.buyPrice ?? trade.entryPrice ?? 0);
-  const ltp = Number(trade.ltp ?? trade.sellPrice ?? trade.exitPrice ?? avgPrice);
+  const ltp = pnlObj.markPrice;
   const qty = Number(trade.quantity || 1);
   const lotSize = Number(trade.lotSize || 1);
   const totalUnits = qty * lotSize;
   const invested = avgPrice * totalUnits;
-  const marketVal = ltp * totalUnits;
-  const pctChange = invested > 0 ? (((marketVal - invested) / invested) * 100).toFixed(2) : "0.00";
+  const marketVal = ltp === null ? null : ltp * totalUnits;
+  const pctChange = invested > 0 && marketVal !== null ? (((marketVal - invested) / invested) * 100).toFixed(2) : null;
   const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
 
   return (
@@ -136,18 +143,18 @@ function HoldingCard({ trade, hideValues, onClick }) {
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <Sparkline positive={isProfit} />
+            <Sparkline positive={isProfit} available={pnl !== null} />
             <span
               style={{
                 fontSize: "0.72rem",
                 fontWeight: 700,
                 padding: "2px 8px",
                 borderRadius: 6,
-                background: isProfit ? "var(--bp-green-soft)" : "var(--bp-red-soft)",
-                color: isProfit ? "var(--bp-green)" : "var(--bp-red)",
+                background: pnl === null ? "var(--bp-surface2)" : isProfit ? "var(--bp-green-soft)" : "var(--bp-red-soft)",
+                color: pnl === null ? "var(--bp-muted)" : isProfit ? "var(--bp-green)" : "var(--bp-red)",
               }}
             >
-              {isProfit ? "+" : ""}{pctChange}%
+              {pctChange === null ? "LTP required" : `${Number(pctChange) >= 0 ? "+" : ""}${pctChange}%`}
             </span>
           </div>
           <button type="button" className="bp-icon-btn" style={{ width: 28, height: 28, border: "none", background: "transparent", color: "var(--bp-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -167,7 +174,7 @@ function HoldingCard({ trade, hideValues, onClick }) {
         <div style={{ textAlign: "right" }}>
           <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>Market Value</span>
           <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--bp-text)", fontFamily: "Inter, sans-serif", display: "block", marginTop: 2 }}>
-            {hideValues ? "••••••" : formatCurrency(marketVal)}
+            {hideValues ? "••••••" : marketVal === null ? "—" : formatCurrency(marketVal)}
           </span>
         </div>
       </div>
@@ -176,13 +183,13 @@ function HoldingCard({ trade, hideValues, onClick }) {
         <div>
           <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>LTP</span>
           <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--bp-text)", fontFamily: "Inter, sans-serif", display: "block", marginTop: 2 }}>
-            {formatCurrency(ltp)}
+            {ltp === null ? "LTP required" : formatCurrency(ltp)}
           </span>
         </div>
         <div style={{ textAlign: "right" }}>
           <span style={{ fontSize: "0.72rem", color: "var(--bp-muted)", display: "block" }}>P&L</span>
-          <span style={{ fontSize: "0.88rem", fontWeight: 700, fontFamily: "Inter, sans-serif", display: "block", marginTop: 2, color: isProfit ? "var(--bp-green)" : "var(--bp-red)" }}>
-            {hideValues ? "••••••" : `${isProfit ? "+" : ""}${formatCurrency(pnl)}`}
+          <span style={{ fontSize: "0.88rem", fontWeight: 700, fontFamily: "Inter, sans-serif", display: "block", marginTop: 2, color: pnl === null ? "var(--bp-muted)" : isProfit ? "var(--bp-green)" : "var(--bp-red)" }}>
+            {hideValues ? "••••••" : formatSignedPnl(pnl)}
           </span>
         </div>
       </div>
@@ -197,9 +204,7 @@ function PositionItem({ trade, onClick }) {
   const isProfit = pnlObj.isProfit;
 
   const buyPrice = Number(trade.buyPrice ?? trade.entryPrice ?? 0);
-  const sellPrice = trade.sellPrice ?? trade.exitPrice;
-  const hasSell = sellPrice !== null && sellPrice !== undefined && sellPrice !== "";
-  const ltp = Number(trade.ltp ?? buyPrice);
+  const ltp = pnlObj.markPrice;
 
   const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
   const tradeModeText = (trade.tradeMode || "mis").toUpperCase();
@@ -212,16 +217,16 @@ function PositionItem({ trade, onClick }) {
     >
       {/* Row 1 */}
       <div className="bp-position-row bp-position-row--1">
-        <span>Qty. {trade.status === "closed" ? 0 : trade.quantity}</span>
-        <span>Sell Avg. {hasSell ? Number(sellPrice).toFixed(2) : "–"}</span>
+        <span>Qty. {pnlObj.totalUnits}</span>
+        <span>Exit Avg. –</span>
         <span className="bp-order-mode-tag">{tradeModeText}</span>
       </div>
 
       {/* Row 2 */}
       <div className="bp-position-row bp-position-row--2">
         <span className="bp-position-symbol">{trade.symbol || trade.stockName}</span>
-        <span className={`bp-position-pnl ${isProfit ? "is-green" : "is-red"}`}>
-          {isProfit ? "+" : ""}{formatCurrency(pnl)}
+        <span className={`bp-position-pnl ${pnl === null ? "" : isProfit ? "is-green" : "is-red"}`}>
+          {formatSignedPnl(pnl)}
         </span>
       </div>
 
@@ -229,7 +234,7 @@ function PositionItem({ trade, onClick }) {
       <div className="bp-position-row bp-position-row--3">
         <span>{exchangeTag}</span>
         <span>Buy Avg. {Number(buyPrice).toFixed(2)}</span>
-        <span>LTP {Number(ltp).toFixed(2)}</span>
+        <span>LTP {ltp === null ? "required" : Number(ltp).toFixed(2)}</span>
       </div>
     </div>
   );
@@ -266,57 +271,30 @@ export default function BrokerHoldingsPage() {
     return trades.filter((t) => t.clientId?._id === selectedClient._id || t.clientId === selectedClient._id);
   }, [trades, selectedClient]);
 
-  // Holdings are CNC / NRML / Delivery orders
-  const holdings = useMemo(() => {
-    return clientTrades.filter((t) => t.tradeMode === "cnc" || t.tradeMode === "nrml" || t.segment === "delivery");
-  }, [clientTrades]);
+  // Portfolio exposure is open-only. Closed trades remain available to the
+  // realised summary but never appear in Holdings or Positions.
+  const openTrades = useMemo(() => clientTrades.filter(isTradeOpen), [clientTrades]);
+  const holdings = useMemo(() => openTrades.filter(isOpenHolding), [openTrades]);
+  const positions = useMemo(() => openTrades.filter(isOpenPosition), [openTrades]);
 
-  // Positions are MIS / Intraday orders
-  const positions = useMemo(() => {
-    return clientTrades.filter((t) => t.tradeMode === "mis" || t.segment === "intraday");
-  }, [clientTrades]);
-
-  // Step 1: Context-aware trade lists based on active tab
-  const activeTrades = useMemo(() => {
-    return activeTab === "holdings" ? holdings : positions;
-  }, [activeTab, holdings, positions]);
-
-  // Step 2: Separate Open vs Closed trades to prevent closed trades from inflating capital metrics
-  const openTrades = useMemo(() => activeTrades.filter(t => t.status === "open"), [activeTrades]);
-  const closedTrades = useMemo(() => activeTrades.filter(t => t.status === "closed"), [activeTrades]);
-
-  // Step 3: Calculate accurate financials using open trades for capital metrics
   const investedTotal = useMemo(() =>
     openTrades.reduce((s, t) => s + (Number(t.quantity || 1) * Number(t.lotSize || 1) * Number(t.buyPrice ?? t.entryPrice ?? 0)), 0),
     [openTrades]
   );
 
-  const marketValTotal = useMemo(() =>
-    openTrades.reduce((s, t) => {
-      const units = Number(t.quantity || 1) * Number(t.lotSize || 1);
-      const buyP = Number(t.buyPrice ?? t.entryPrice ?? 0);
-      const ltpP = Number(t.ltp ?? t.sellPrice ?? t.exitPrice ?? buyP);
-      return s + (units * ltpP);
-    }, 0),
-    [openTrades]
+  const openMetrics = useMemo(() => openTrades.map(computeTradePnL), [openTrades]);
+  const pnlSummary = useMemo(() => summarizeTradePnL(clientTrades), [clientTrades]);
+  const { realizedPnL: realisedPnL, unrealizedPnL: unrealisedPnL, totalPnL, missingLtpCount } = pnlSummary;
+  const knownMarketValTotal = useMemo(() =>
+    openMetrics.reduce((sum, metric) => sum + (metric.markPrice === null ? 0 : metric.totalUnits * metric.markPrice), 0),
+    [openMetrics]
   );
+  const marketValTotal = missingLtpCount > 0 ? null : knownMarketValTotal;
 
-  // Profit & Loss Metrics (Net P&L - Brokerage Deducted)
-  const unrealisedPnL = useMemo(() =>
-    openTrades.reduce((s, t) => s + computeTradePnL(t).netPnL, 0),
-    [openTrades]
-  );
-
-  const realisedPnL = useMemo(() =>
-    closedTrades.reduce((s, t) => s + computeTradePnL(t).netPnL, 0),
-    [closedTrades]
-  );
-
-  const totalPnL = realisedPnL + unrealisedPnL;
-  const totalPnLPct = investedTotal > 0 ? ((totalPnL / investedTotal) * 100).toFixed(2) : "0.00";
+  const totalPnLPct = totalPnL !== null && investedTotal > 0 ? ((totalPnL / investedTotal) * 100).toFixed(2) : null;
 
   return (
-    <div style={{ background: "var(--bp-bg)", minHeight: "100vh", paddingBottom: 80 }}>
+    <div className="bp-page bp-portfolio-page" style={{ background: "var(--bp-bg)", minHeight: "100vh", paddingBottom: 80 }}>
       {/* ── Sticky Top Header ── */}
       <div className="bp-page-header">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -356,17 +334,17 @@ export default function BrokerHoldingsPage() {
         <div style={{ margin: "12px 12px 0", background: "var(--bp-surface)", border: "1px solid var(--bp-border)", borderRadius: "var(--bp-radius-lg)", padding: "18px 16px 14px", boxShadow: "var(--bp-shadow)" }}>
           <div style={{ textAlign: "center", paddingBottom: 14, borderBottom: "1px solid var(--bp-border)" }}>
             <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--bp-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              Total Net Return
+              Total P&amp;L
               <button type="button" onClick={() => setHideValues((v) => !v)} style={{ background: "transparent", border: "none", color: "var(--bp-blue)", cursor: "pointer", padding: 0 }}>
                 <EyeIcon hidden={hideValues} />
               </button>
             </p>
-            <p style={{ margin: "4px 0 0", fontSize: "1.75rem", fontWeight: 700, fontFamily: "Inter, sans-serif", color: totalPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
-              {hideValues ? "••••••••" : `${totalPnL >= 0 ? "+" : ""}${formatCurrency(totalPnL)}`}
+            <p style={{ margin: "4px 0 0", fontSize: "1.75rem", fontWeight: 700, fontFamily: "Inter, sans-serif", color: totalPnL === null ? "var(--bp-muted)" : totalPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
+              {hideValues ? "••••••••" : formatSignedPnl(totalPnL)}
             </p>
             <p style={{ margin: "6px 0 0", fontSize: "0.82rem", color: "var(--bp-muted)" }}>
-              <span className={totalPnL >= 0 ? "bp-profit" : "bp-loss"} style={{ fontWeight: 700 }}>
-                {hideValues ? "••••" : `(${totalPnL >= 0 ? "+" : ""}${totalPnLPct}%)`}
+              <span className={totalPnL === null ? "" : totalPnL >= 0 ? "bp-profit" : "bp-loss"} style={{ fontWeight: 700 }}>
+                {hideValues ? "••••" : totalPnLPct === null ? "—" : `(${Number(totalPnLPct) >= 0 ? "+" : ""}${totalPnLPct}%)`}
               </span>
             </p>
           </div>
@@ -381,7 +359,7 @@ export default function BrokerHoldingsPage() {
             <div style={{ textAlign: "center", padding: "6px", background: "var(--bp-bg)", borderRadius: "8px" }}>
               <span style={{ fontSize: "0.7rem", color: "var(--bp-muted)", display: "block" }}>Market Value</span>
               <span style={{ fontSize: "0.85rem", fontWeight: 600, fontFamily: "Inter, sans-serif", display: "block", marginTop: 3, color: "var(--bp-text)" }}>
-                {hideValues ? "••••••" : formatCurrency(marketValTotal)}
+                {hideValues ? "••••••" : marketValTotal === null ? "—" : formatCurrency(marketValTotal)}
               </span>
             </div>
             <div style={{ textAlign: "center", padding: "6px", background: "var(--bp-bg)", borderRadius: "8px" }}>
@@ -392,12 +370,18 @@ export default function BrokerHoldingsPage() {
             </div>
             <div style={{ textAlign: "center", padding: "6px", background: "var(--bp-bg)", borderRadius: "8px" }}>
               <span style={{ fontSize: "0.7rem", color: "var(--bp-muted)", display: "block" }}>Unrealised P&L</span>
-              <span style={{ fontSize: "0.85rem", fontWeight: 600, fontFamily: "Inter, sans-serif", display: "block", marginTop: 3, color: unrealisedPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
-                {hideValues ? "••••••" : `${unrealisedPnL >= 0 ? "+" : ""}${formatCurrency(unrealisedPnL)}`}
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, fontFamily: "Inter, sans-serif", display: "block", marginTop: 3, color: unrealisedPnL === null ? "var(--bp-muted)" : unrealisedPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
+                {hideValues ? "••••••" : formatSignedPnl(unrealisedPnL)}
               </span>
             </div>
           </div>
         </div>
+      )}
+
+      {!loading && missingLtpCount > 0 && (
+        <p className="bp-pnl-data-note" role="status">
+          LTP is required for {missingLtpCount} open {missingLtpCount === 1 ? "trade" : "trades"}. Market value, unrealised P&amp;L and total P&amp;L stay unavailable until updated.
+        </p>
       )}
 
       {/* ══ HOLDINGS TAB ══ */}
@@ -426,7 +410,7 @@ export default function BrokerHoldingsPage() {
           ) : (
             <div className="bp-empty" style={{ margin: "12px" }}>
               <BriefcaseIcon />
-              <p>No CNC holdings recorded for this account</p>
+              <p>No open holdings for this account</p>
             </div>
           )}
 
@@ -452,7 +436,7 @@ export default function BrokerHoldingsPage() {
             </div>
           ) : (
             <div className="bp-empty">
-              <p>No MIS / open positions recorded</p>
+              <p>No open positions for this account</p>
             </div>
           )}
         </div>

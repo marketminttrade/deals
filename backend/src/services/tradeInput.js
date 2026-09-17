@@ -56,6 +56,16 @@ function dateValue(value, label) {
 // Merge aliases explicitly so PATCH can clear an exit and does not revive an old alias.
 function normalizeTradeInput(input, existing = {}) {
   const merged = { ...existing, ...input };
+  const inputHasLtp = Object.prototype.hasOwnProperty.call(input, "ltp");
+  const inputLtpMissing = input.ltp === undefined || input.ltp === null || String(input.ltp).trim() === "";
+  const hasExisting = Object.keys(existing).length > 0;
+  const ltpProvided = inputHasLtp
+    ? !inputLtpMissing
+    : input.ltpProvided !== undefined
+      ? Boolean(input.ltpProvided)
+      : existing.ltpProvided !== undefined
+        ? Boolean(existing.ltpProvided)
+        : hasExisting;
   merged.entryPrice = input.entryPrice !== undefined ? input.entryPrice
     : input.buyPrice !== undefined ? input.buyPrice : existing.entryPrice ?? existing.buyPrice;
   merged.exitPrice = input.exitPrice !== undefined ? input.exitPrice
@@ -82,6 +92,7 @@ function normalizeTradeInput(input, existing = {}) {
     buyPrice: financial.entryPrice,
     sellPrice: financial.exitPrice ?? null,
     exitPrice: financial.exitPrice ?? null,
+    ltpProvided,
     strikePrice: merged.strikePrice == null || merged.strikePrice === "" ? null : numberValue(merged.strikePrice, "Strike price"),
     expiryDate: dateValue(merged.expiryDate, "Expiry date"),
     optionType: String(merged.optionType || "").toUpperCase(),

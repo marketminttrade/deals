@@ -4,6 +4,7 @@ export const ACCOUNT_ROUTES = {
   dashboard: "/account/dashboard",
   customers: "/account/customers",
   trades: "/account/trades",
+  portfolio: "/account/holdings",
   invoice: "/account/invoice",
   profile: "/account/profile",
 };

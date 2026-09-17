@@ -53,6 +53,9 @@ const tradeSchema = new mongoose.Schema(
     buyPrice: { type: Number, min: 0 },
     sellPrice: { type: Number, min: 0 },
     ltp: { type: Number, default: 0.20 },
+    // Keeps a missing market price distinct from a genuine LTP equal to entry.
+    // Default true preserves the display contract for historical records.
+    ltpProvided: { type: Boolean, default: true },
     ltpColor: { type: String, enum: ["green", "red"], default: "green" },
     totalBuy: { type: Number, default: 0 },
     totalSell: { type: Number, default: 0 },

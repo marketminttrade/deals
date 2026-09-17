@@ -2,19 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { brokerApi } from "../../api/client";
+import { ACCOUNT_ROUTES } from "../../constants/accessConfig";
 import { useBrokerAuth } from "../../context/BrokerAuthContext";
-import { computeTradePnL, formatCurrency, formatDate } from "../../utils/formatters";
+import { computeTradePnL, formatCurrency, formatDate, summarizeTradePnL } from "../../utils/formatters";
+
+const TRADE_CAPTURE_WIDTH = 500;
 
 // ── Helpers ───────────────────────────────────────────────
-function formatFullDateTime(dateValue) {
-  if (!dateValue) return "–";
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "–";
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) + ", " + date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
-}
-
 function tradeModeLabel(m) {
   return m === "mis" ? "MIS" : m === "nrml" ? "NRML" : "CNC";
+}
+
+function formatSignedPnl(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  const amount = Number(value);
+  return `${amount >= 0 ? "+" : ""}${formatCurrency(amount)}`;
 }
 
 // ── Icons ─────────────────────────────────────────────────
@@ -134,7 +136,7 @@ function EditOrderTimeModal({ type, currentTime, onClose, onSave }) {
               padding: "0 10px",
               borderRadius: 8,
               border: "1px solid var(--bp-border)",
-              fontSize: "0.88rem",
+              fontSize: "1rem",
               fontFamily: "Inter, sans-serif",
               marginBottom: 16,
               boxSizing: "border-box"
@@ -179,20 +181,21 @@ function TradeDetailPage({ trade, onBack }) {
   const grossPnL = pnlObj.grossPnL;
   const charges = currentTrade.charges || {};
   const totalCharges = Number(charges.total ?? charges.brokerage ?? 0);
-  const realisedPnL = pnlObj.netPnL !== undefined ? pnlObj.netPnL : (grossPnL - totalCharges);
-  const isGrossProfit = grossPnL >= 0;
-  const isNetProfit = realisedPnL >= 0;
+  const realisedPnL = pnlObj.realizedPnL;
+  const isGrossProfit = grossPnL !== null && grossPnL >= 0;
+  const isNetProfit = realisedPnL !== null && realisedPnL >= 0;
   const buyPrice = currentTrade.buyPrice ?? currentTrade.entryPrice ?? 0;
-  const sellPrice = currentTrade.sellPrice ?? currentTrade.exitPrice;
-  const hasSell = sellPrice !== null && sellPrice !== undefined && sellPrice !== "";
-  const buyExecuted = currentTrade.side !== "sell" || hasSell;
-  const sellExecuted = currentTrade.side === "sell" || hasSell;
+  const sellPrice = pnlObj.isClosed ? pnlObj.markPrice : null;
+  const buyExecuted = currentTrade.side !== "sell" || pnlObj.isClosed;
+  const sellExecuted = currentTrade.side === "sell" || pnlObj.isClosed;
   const actualBuyPrice = currentTrade.side === "sell" ? sellPrice : buyPrice;
   const actualSellPrice = currentTrade.side === "sell" ? buyPrice : sellPrice;
 
   const exchangeTag = currentTrade.instrument === "EQUITY" ? "NSE" : (currentTrade.segment === "commodity" ? "MCX" : "NFO");
   const totalUnits = Number(currentTrade.quantity || 1) * Number(currentTrade.lotSize || 1);
-  const pnlPercent = (buyPrice && grossPnL && totalUnits) ? ((grossPnL / (buyPrice * totalUnits)) * 100).toFixed(2) : "0.00";
+  const pnlPercent = buyPrice && grossPnL !== null && totalUnits
+    ? ((grossPnL / (buyPrice * totalUnits)) * 100).toFixed(2)
+    : null;
 
   // Check trade category for conditional field visibility
   const isOptions = Boolean(
@@ -215,13 +218,25 @@ function TradeDetailPage({ trade, onBack }) {
     const el = document.getElementById("bp-trade-detail-container");
     if (!el) return;
     setCapturing(true);
-    el.classList.add("is-sharing-capture");
     try {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
       const canvas = await html2canvas(el, {
         scale: 2,
+        width: TRADE_CAPTURE_WIDTH,
+        windowWidth: TRADE_CAPTURE_WIDTH,
+        scrollX: 0,
+        scrollY: 0,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
+        onclone: (clonedDocument) => {
+          clonedDocument
+            .getElementById("bp-trade-detail-container")
+            ?.classList.add("is-sharing-capture");
+        },
       });
 
       const dataUrl = canvas.toDataURL("image/png");
@@ -243,7 +258,6 @@ function TradeDetailPage({ trade, onBack }) {
     } catch (err) {
       console.error("Screenshot capture error:", err);
     } finally {
-      el.classList.remove("is-sharing-capture");
       setCapturing(false);
     }
   };
@@ -255,10 +269,20 @@ function TradeDetailPage({ trade, onBack }) {
       [fieldKey]: newTimeIso,
     };
 
+    // A timeline-only edit must not turn an SS-style open record's legacy
+    // sellPrice/LTP alias into an exit. Send the resolved open mark explicitly
+    // while clearing both exit aliases; canonical open records stay unchanged.
+    const updatePayload = { orderTimeline: updatedTimeline };
+    if (pnlObj.isOpen) {
+      updatePayload.status = "open";
+      updatePayload.sellPrice = null;
+      updatePayload.exitPrice = null;
+      updatePayload.ltp = pnlObj.markPrice;
+      updatePayload.ltpProvided = pnlObj.hasMarketPrice;
+    }
+
     try {
-      const res = await brokerApi.patch(`/api/broker-portal/trades/${currentTrade._id}`, {
-        orderTimeline: updatedTimeline,
-      });
+      const res = await brokerApi.patch(`/api/broker-portal/trades/${currentTrade._id}`, updatePayload);
       if (res.data) {
         setCurrentTrade(res.data);
       }
@@ -267,8 +291,8 @@ function TradeDetailPage({ trade, onBack }) {
     }
   };
 
-  const isOpenTrade = !hasSell && currentTrade.status !== "closed";
-  const ltpVal = currentTrade.ltp !== undefined && currentTrade.ltp !== null && currentTrade.ltp !== "" ? Number(currentTrade.ltp) : buyPrice;
+  const isOpenTrade = pnlObj.isOpen;
+  const ltpVal = pnlObj.markPrice;
   const isLtpRed = currentTrade.ltpColor === "red";
   const ltpColorClass = isLtpRed ? "bp-detail-icon--red" : "bp-detail-icon--green";
   const ltpTextColor = isLtpRed ? "var(--bp-red)" : "var(--bp-green)";
@@ -292,7 +316,7 @@ function TradeDetailPage({ trade, onBack }) {
       ? [{
           icon: <WaveIcon />,
           label: "LTP",
-          val: Number(ltpVal).toFixed(2),
+          val: ltpVal === null ? "LTP required" : Number(ltpVal).toFixed(2),
           boxClass: `bp-detail-icon ${ltpColorClass}`,
           valueStyle: { color: ltpTextColor, fontWeight: 700 }
         }]
@@ -353,21 +377,17 @@ function TradeDetailPage({ trade, onBack }) {
         <div className="bp-trade-detail-section bp-trade-detail-section--status">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className={`bp-badge bp-badge--${currentTrade.status}`} style={{ fontSize: "0.72rem", padding: "3px 8px", fontWeight: 700, borderRadius: 6 }}>
-                {currentTrade.status.toUpperCase()}
+              <span className={`bp-badge bp-badge--${pnlObj.isClosed ? "closed" : "open"}`} style={{ fontSize: "0.72rem", padding: "3px 8px", fontWeight: 700, borderRadius: 6 }}>
+                {pnlObj.isClosed ? "CLOSED" : "OPEN"}
               </span>
               <span style={{ fontSize: "0.8rem", color: "var(--bp-muted)", fontWeight: 600 }}>
                 {tradeModeLabel(currentTrade.tradeMode)}
               </span>
             </div>
-            <span style={{ fontSize: "0.76rem", color: "var(--bp-muted)", fontWeight: 500 }}>
-              Trade date: {formatDate(currentTrade.tradedAt)}
-            </span>
           </div>
 
-          {/* ── Two P&L Cards: NET P&L & REALISED P&L ── */}
+          {/* ── P&L and charges use the same open/closed contract as summaries. ── */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
-            {/* Card 1: NET P&L */}
             <div style={{
               background: "var(--bp-surface)",
               border: "1px solid var(--bp-border)",
@@ -376,10 +396,10 @@ function TradeDetailPage({ trade, onBack }) {
               boxShadow: "0 1px 4px rgba(0,0,0,0.03)"
             }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--bp-muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                Gross P&L
+                {isOpenTrade ? "Unrealised P&L" : "Gross P&L"}
               </span>
-              <span className={`bp-card-val ${isGrossProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
-                {isGrossProfit ? "+" : ""}{formatCurrency(grossPnL)}
+              <span className={`bp-card-val ${grossPnL === null ? "" : isGrossProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
+                {formatSignedPnl(grossPnL)}
               </span>
               <span style={{
                 fontSize: "0.72rem",
@@ -388,14 +408,13 @@ function TradeDetailPage({ trade, onBack }) {
                 marginTop: 6,
                 padding: "2px 6px",
                 borderRadius: 6,
-                background: isGrossProfit ? "rgba(16, 185, 129, 0.12)" : "rgba(229, 57, 53, 0.12)",
-                color: isGrossProfit ? "var(--bp-green)" : "var(--bp-red)"
+                background: grossPnL === null ? "var(--bp-surface2)" : isGrossProfit ? "rgba(16, 185, 129, 0.12)" : "rgba(229, 57, 53, 0.12)",
+                color: grossPnL === null ? "var(--bp-muted)" : isGrossProfit ? "var(--bp-green)" : "var(--bp-red)"
               }}>
-                {isGrossProfit ? "+" : ""}{pnlPercent}%
+                {pnlPercent === null ? "LTP required" : `${Number(pnlPercent) >= 0 ? "+" : ""}${pnlPercent}%`}
               </span>
             </div>
 
-            {/* Card 2: REALISED P&L */}
             <div style={{
               background: "var(--bp-surface)",
               border: "1px solid var(--bp-border)",
@@ -404,11 +423,16 @@ function TradeDetailPage({ trade, onBack }) {
               boxShadow: "0 1px 4px rgba(0,0,0,0.03)"
             }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--bp-muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                {hasSell ? "Net P&L" : "Net P&L (Unrealized)"}
+                {isOpenTrade ? "Brokerage / Charges" : "Realised P&L (Net)"}
               </span>
-              <span className={`bp-card-val ${isNetProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
-                {isNetProfit ? "+" : ""}{formatCurrency(realisedPnL)}
+              <span className={`bp-card-val ${isOpenTrade ? "" : isNetProfit ? "is-green" : "is-red"}`} style={{ fontSize: "1.25rem", fontWeight: 800, fontFamily: "Plus Jakarta Sans, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: 4, display: "block" }}>
+                {isOpenTrade ? formatCurrency(totalCharges) : formatSignedPnl(realisedPnL)}
               </span>
+              {isOpenTrade && (
+                <span style={{ display: "block", marginTop: 6, color: "var(--bp-muted)", fontSize: "0.7rem", fontWeight: 600 }}>
+                  Shown separately from unrealised P&amp;L
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -443,9 +467,6 @@ function TradeDetailPage({ trade, onBack }) {
               onClick={() => setEditingType("buy")}
             >
               <span className="bp-order-card__title is-green">Buy Order</span>
-              <span className="bp-order-card__time">
-                {currentTrade.orderTimeline?.buyOrderTime ? formatFullDateTime(currentTrade.orderTimeline.buyOrderTime) : formatDate(currentTrade.tradedAt)}
-              </span>
               <div className="bp-order-card__badge-row">
                 <span className="bp-badge bp-badge--complete" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
                   {buyExecuted ? "COMPLETE" : "OPEN"}
@@ -536,9 +557,9 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
   const isProfit = pnlObj.isProfit;
 
   const buyPrice = Number(trade.buyPrice ?? trade.entryPrice ?? 0);
-  const sellPrice = trade.sellPrice ?? trade.exitPrice;
-  const hasSell = sellPrice !== null && sellPrice !== undefined && sellPrice !== "";
-  const ltp = Number(trade.ltp ?? buyPrice);
+  const sellPrice = pnlObj.isClosed ? pnlObj.markPrice : null;
+  const hasSell = pnlObj.isClosed;
+  const ltp = pnlObj.isOpen ? pnlObj.markPrice : null;
 
   const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
   const tradeModeText = (trade.tradeMode || "mis").toUpperCase();
@@ -572,16 +593,16 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Row 1 */}
         <div className="bp-position-row bp-position-row--1">
-          <span>Qty. {trade.status === "closed" ? 0 : (Number(trade.quantity || 1) * Number(trade.lotSize || 1))}</span>
+          <span>Qty. {pnlObj.totalUnits}</span>
           <span>Exit Avg. {hasSell ? Number(sellPrice).toFixed(2) : "–"}</span>
-          <span className="bp-order-mode-tag">{tradeModeText}</span>
+          <span className="bp-order-mode-tag">{tradeModeText} · {pnlObj.isClosed ? "CLOSED" : "OPEN"}</span>
         </div>
 
         {/* Row 2 */}
         <div className="bp-position-row bp-position-row--2">
           <span className="bp-position-symbol">{trade.symbol || trade.stockName}</span>
-          <span className={`bp-position-pnl ${isProfit ? "is-green" : "is-red"}`}>
-            {isProfit ? "+" : ""}{formatCurrency(pnl)}
+          <span className={`bp-position-pnl ${pnl === null ? "" : isProfit ? "is-green" : "is-red"}`}>
+            {formatSignedPnl(pnl)}
           </span>
         </div>
 
@@ -589,8 +610,8 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
         <div className="bp-position-row bp-position-row--3">
           <span>{exchangeTag}</span>
           <span>Entry Avg. {Number(buyPrice).toFixed(2)}</span>
-          <span style={{ color: trade.ltpColor === "red" ? "var(--bp-red)" : (trade.ltpColor === "green" ? "var(--bp-green)" : "inherit") }}>
-            LTP {Number(ltp).toFixed(2)}
+          <span style={{ color: pnlObj.isOpen && ltp !== null ? (trade.ltpColor === "red" ? "var(--bp-red)" : (trade.ltpColor === "green" ? "var(--bp-green)" : "inherit")) : "inherit" }}>
+            {pnlObj.isOpen ? `LTP ${ltp === null ? "required" : Number(ltp).toFixed(2)}` : null}
           </span>
         </div>
       </div>
@@ -610,7 +631,6 @@ export default function BrokerTradesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [selectedTrade, setSelectedTrade] = useState(null);
-  const [activeTab, setActiveTab] = useState("positions");
 
   // Selection mode for bulk deletion
   const [selectionMode, setSelectionMode] = useState(false);
@@ -673,15 +693,13 @@ export default function BrokerTradesPage() {
     return null;
   }, [selectedTrade, tradeId, trades]);
 
-  const realisedPnL = useMemo(() =>
-    filteredTrades.filter(t => t.status === "closed" || (t.sellPrice !== null && t.sellPrice !== undefined && t.sellPrice !== "")).reduce((s, t) => s + computeTradePnL(t).pnl, 0)
-  , [filteredTrades]);
-
-  const unrealisedPnL = useMemo(() =>
-    filteredTrades.filter(t => t.status !== "closed" && (t.sellPrice === null || t.sellPrice === undefined || t.sellPrice === "")).reduce((s, t) => s + computeTradePnL(t).pnl, 0)
-  , [filteredTrades]);
-
-  const totalPnL = realisedPnL + unrealisedPnL;
+  const pnlSummary = useMemo(() => summarizeTradePnL(filteredTrades), [filteredTrades]);
+  const {
+    realizedPnL: realisedPnL,
+    unrealizedPnL: unrealisedPnL,
+    totalPnL,
+    missingLtpCount,
+  } = pnlSummary;
 
   if (activeTrade) {
     return (
@@ -696,7 +714,7 @@ export default function BrokerTradesPage() {
   }
 
   return (
-    <div style={{ background: "var(--bp-bg)", minHeight: "100vh", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", overflowX: "hidden", boxSizing: "border-box", width: "100%", maxWidth: "100%" }}>
+    <div className="bp-page bp-orders-page" style={{ background: "var(--bp-bg)", minHeight: "100vh", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       {/* ── Sticky Header ── */}
       <div className="bp-page-header">
         <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0, color: "var(--bp-text)", fontFamily: "Inter, sans-serif" }}>
@@ -795,17 +813,16 @@ export default function BrokerTradesPage() {
       <div className="bp-tab-row">
         <button
           type="button"
-          className={`bp-tab-btn${activeTab === "positions" ? " is-active" : ""}`}
-          onClick={() => setActiveTab("positions")}
+          className="bp-tab-btn is-active"
         >
-          Positions ({filteredTrades.length})
+          All Orders ({filteredTrades.length})
         </button>
         <button
           type="button"
-          className={`bp-tab-btn${activeTab === "holdings" ? " is-active" : ""}`}
-          onClick={() => navigate("/account/holdings")}
+          className="bp-tab-btn"
+          onClick={() => navigate(ACCOUNT_ROUTES.portfolio)}
         >
-          Holdings
+          Portfolio
         </button>
       </div>
 
@@ -813,8 +830,8 @@ export default function BrokerTradesPage() {
       <div style={{ margin: "10px 12px 0", background: "var(--bp-surface)", border: "1px solid var(--bp-border)", borderRadius: "var(--bp-radius-lg)", padding: "16px 14px 12px", boxShadow: "var(--bp-shadow)" }}>
         <div style={{ textAlign: "center", paddingBottom: 14, borderBottom: "1px solid var(--bp-border)" }}>
           <span style={{ fontSize: "0.82rem", color: "var(--bp-muted)", margin: 0, display: "block" }}>Total P&L</span>
-          <span style={{ fontSize: "1.65rem", fontWeight: 700, fontFamily: "Inter, sans-serif", margin: "4px 0 0", display: "block", color: totalPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
-            {totalPnL >= 0 ? "+" : ""}{formatCurrency(totalPnL)}
+          <span style={{ fontSize: "1.65rem", fontWeight: 700, fontFamily: "Inter, sans-serif", margin: "4px 0 0", display: "block", color: totalPnL === null ? "var(--bp-muted)" : totalPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
+            {formatSignedPnl(totalPnL)}
           </span>
         </div>
 
@@ -828,12 +845,18 @@ export default function BrokerTradesPage() {
           <div style={{ background: "var(--bp-border)", width: 1 }} />
           <div style={{ textAlign: "center" }}>
             <span style={{ fontSize: "0.75rem", color: "var(--bp-muted)", display: "block" }}>Unrealised P&L</span>
-            <span style={{ fontSize: "0.98rem", fontWeight: 600, fontFamily: "Inter, sans-serif", display: "block", marginTop: 3, color: unrealisedPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
-              {unrealisedPnL >= 0 ? "+" : ""}{formatCurrency(unrealisedPnL)}
+            <span style={{ fontSize: "0.98rem", fontWeight: 600, fontFamily: "Inter, sans-serif", display: "block", marginTop: 3, color: unrealisedPnL === null ? "var(--bp-muted)" : unrealisedPnL >= 0 ? "var(--bp-green)" : "var(--bp-red)" }}>
+              {formatSignedPnl(unrealisedPnL)}
             </span>
           </div>
         </div>
       </div>
+
+      {missingLtpCount > 0 && (
+        <p className="bp-pnl-data-note" role="status">
+          LTP is required for {missingLtpCount} open {missingLtpCount === 1 ? "order" : "orders"}. Unrealised and total P&amp;L stay unavailable until updated.
+        </p>
+      )}
 
       {/* ── Sub-note banner ── */}
       <p style={{ textAlign: "center", fontSize: "0.76rem", color: "var(--bp-muted)", margin: "14px 16px 8px" }}>
@@ -861,7 +884,7 @@ export default function BrokerTradesPage() {
       {!loading && filteredTrades.length === 0 && (
         <div className="bp-empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /></svg>
-          <p>No open or closed positions recorded</p>
+          <p>No orders recorded</p>
           <button type="button" className="bp-btn-solid" style={{ marginTop: 8, padding: "10px 20px" }} onClick={() => navigate("/account/trades/new")}>Add First Trade</button>
         </div>
       )}
@@ -869,9 +892,9 @@ export default function BrokerTradesPage() {
       {/* ── Sticky Bottom MTM Bar matching Orders.jpeg ── */}
       {!loading && filteredTrades.length > 0 && (
         <div className="bp-mtm-bar">
-          <span className="bp-mtm-bar__label">MTM</span>
-          <span className={`bp-mtm-bar__value ${totalPnL >= 0 ? "bp-profit" : "bp-loss"}`}>
-            {totalPnL >= 0 ? "+" : ""}{formatCurrency(totalPnL)}
+          <span className="bp-mtm-bar__label">Unrealised MTM</span>
+          <span className={`bp-mtm-bar__value ${unrealisedPnL === null ? "" : unrealisedPnL >= 0 ? "bp-profit" : "bp-loss"}`}>
+            {formatSignedPnl(unrealisedPnL)}
           </span>
         </div>
       )}

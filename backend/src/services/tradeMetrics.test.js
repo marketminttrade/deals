@@ -80,6 +80,23 @@ test("PATCH preserves rate, mode, and sell timestamp, and can clear both exit al
   assert.throws(() => normalizeTradeInput({ ...equity, status: "open" }), /LTP/);
 });
 
+test("normalization records whether LTP was actually supplied", () => {
+  const blank = normalizeTradeInput({ ...equity, exitPrice: null, ltp: "" });
+  assert.equal(blank.ltp, equity.entryPrice);
+  assert.equal(blank.ltpProvided, false);
+
+  const unchanged = normalizeTradeInput({ ...equity, exitPrice: null, ltp: equity.entryPrice });
+  assert.equal(unchanged.ltpProvided, true);
+  assert.equal(calculateCharges(unchanged).grossPnL, 0);
+
+  const zero = normalizeTradeInput({ ...equity, exitPrice: null, ltp: 0 });
+  assert.equal(zero.ltpProvided, true);
+
+  const existing = { ...blank, ltpProvided: false };
+  assert.equal(normalizeTradeInput({ stockName: "patched" }, existing).ltpProvided, false);
+  assert.equal(normalizeTradeInput({ ltp: 250 }, existing).ltpProvided, true);
+});
+
 test("short trades have actual buy/sell totals and leg statuses", () => {
   const trade = normalizeTradeInput({ ...equity, side: "sell", exitPrice: null });
   const result = calculateCharges(trade);

@@ -4,6 +4,7 @@ import { brokerApi } from "../../api/client";
 import { useBrokerAuth } from "../../context/BrokerAuthContext";
 import { ACCOUNT_ROUTES } from "../../constants/accessConfig";
 import { initialsFromName } from "../../utils/formatters";
+import { resolveTradeLifecycle } from "../../utils/tradeClassification";
 
 // ── Icons ──────────────────────────────────────────────────
 const BackArrowIcon = () => (
@@ -178,7 +179,7 @@ function ClientModal({ clients, selectedId, onSelect, onClose }) {
               placeholder="Search by name or client ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ border: "none", background: "transparent", outline: "none", flex: 1, fontSize: "0.9rem", color: "var(--bp-text, #0F172A)", fontFamily: "Source Sans 3, sans-serif" }}
+              style={{ border: "none", background: "transparent", outline: "none", flex: 1, fontSize: "1rem", color: "var(--bp-text, #0F172A)", fontFamily: "Inter, Source Sans 3, sans-serif" }}
               autoFocus
             />
           </div>
@@ -309,6 +310,7 @@ export default function NewTradePage() {
           const allTrades = trRes.data?.trades || trRes.data || [];
           const tradeToEdit = allTrades.find((t) => t._id === tradeId);
           if (tradeToEdit) {
+            const lifecycle = resolveTradeLifecycle(tradeToEdit);
             setExistingTimeline(tradeToEdit.orderTimeline || null);
             let type = "Equity";
             if (tradeToEdit.instrument === "OPTIDX" || tradeToEdit.segment === "options") type = "Options";
@@ -332,8 +334,12 @@ export default function NewTradePage() {
               priceType: "Market",
               limitPrice: "",
               buyPrice: String(tradeToEdit.buyPrice ?? tradeToEdit.entryPrice ?? ""),
-              sellPrice: tradeToEdit.sellPrice !== undefined && tradeToEdit.sellPrice !== null ? String(tradeToEdit.sellPrice) : "",
-              ltp: tradeToEdit.ltp !== undefined && tradeToEdit.ltp !== null ? String(tradeToEdit.ltp) : "",
+              sellPrice: lifecycle.isClosed ? String(lifecycle.exitPrice) : "",
+              ltp: tradeToEdit.ltpProvided === false
+                ? ""
+                : tradeToEdit.ltp !== undefined && tradeToEdit.ltp !== null
+                  ? String(tradeToEdit.ltp)
+                  : "",
               ltpColor: tradeToEdit.ltpColor || "green",
               strikePrice: tradeToEdit.strikePrice ? String(tradeToEdit.strikePrice) : "",
               expiryDate: tradeToEdit.expiryDate ? tradeToEdit.expiryDate.slice(0, 10) : "",
@@ -454,7 +460,10 @@ export default function NewTradePage() {
       entryPrice: Number(form.buyPrice),
       sellPrice: sellPriceNum,
       exitPrice: sellPriceNum,
-      ltp: form.ltp !== "" ? Number(form.ltp) : (sellPriceNum ?? Number(form.buyPrice)),
+      // Keep blank LTP distinct from a genuine LTP equal to the entry price.
+      // The backend retains its v2 numeric fallback for stored calculations.
+      ltp: String(form.ltp ?? "").trim() !== "" ? Number(form.ltp) : null,
+      ltpProvided: String(form.ltp ?? "").trim() !== "",
       ltpColor: form.ltpColor || "green",
       brokeragePercent: Number(form.brokerageRate),
       brokerageMode: form.brokerageMode,
@@ -484,7 +493,7 @@ export default function NewTradePage() {
   const currentValidProductType = getValidProductType(form.tradeType, form.productType);
 
   return (
-    <div style={{ background: "var(--bp-bg, #F2F4F7)", minHeight: "100vh", paddingBottom: 90, width: "100%", maxWidth: "100%", overflowX: "hidden", boxSizing: "border-box" }}>
+    <div className="bp-page bp-new-trade-page" style={{ background: "var(--bp-bg, #F2F4F7)", minHeight: "100vh", paddingBottom: 90, width: "100%", overflowX: "hidden", boxSizing: "border-box" }}>
       {/* ── Top Fixed Header Bar ── */}
       <div
         style={{
@@ -646,7 +655,7 @@ export default function NewTradePage() {
                   <input
                     type="text"
                     className="bp-input"
-                    style={{ textTransform: "uppercase", paddingLeft: 30, fontSize: "14px", width: "100%", boxSizing: "border-box" }}
+                    style={{ textTransform: "uppercase", paddingLeft: 30, width: "100%", boxSizing: "border-box" }}
                     placeholder="e.g. RELIANCE"
                     value={form.symbol}
                     onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
@@ -778,7 +787,7 @@ export default function NewTradePage() {
                     min="1"
                     value={form.quantity}
                     onChange={(e) => setForm((f) => ({ ...f, quantity: Math.max(1, Number(e.target.value)) }))}
-                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#0F172A", fontFamily: "Inter, sans-serif" }}
+                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", textAlign: "center", fontSize: "1rem", fontWeight: 700, color: "#0F172A", fontFamily: "Inter, sans-serif" }}
                     required
                   />
                   <button
@@ -1036,6 +1045,11 @@ export default function NewTradePage() {
                     fontWeight: 700
                   }}
                 />
+                {!form.sellPrice && !String(form.ltp || "").trim() && (
+                  <small style={{ display: "block", marginTop: 5, color: "var(--bp-muted, #6B7280)", fontSize: "0.7rem", lineHeight: 1.3 }}>
+                    Enter LTP to calculate unrealised P&amp;L. Until then it will show as unavailable.
+                  </small>
+                )}
               </div>
             </div>
 
@@ -1048,7 +1062,7 @@ export default function NewTradePage() {
                   className="bp-input"
                   value={form.buyOrderTime}
                   onChange={(e) => setForm((f) => ({ ...f, buyOrderTime: e.target.value }))}
-                  style={{ width: "100%", boxSizing: "border-box", fontSize: "13px" }}
+                  style={{ width: "100%", boxSizing: "border-box" }}
                 />
               </div>
 
