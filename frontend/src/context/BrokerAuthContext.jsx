@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { BROKER_AUTH_STORAGE_KEY, LEGACY_BROKER_AUTH_STORAGE_KEY, brokerApi, publicApi } from "../api/client";
 
 const BrokerAuthContext = createContext(null);
@@ -17,14 +17,26 @@ export function BrokerAuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  const setSelectedClient = (client) => {
+  const setSelectedClient = useCallback((client) => {
     setSelectedClientState(client);
     if (client) {
       localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(client));
     } else {
       localStorage.removeItem(CLIENT_STORAGE_KEY);
     }
-  };
+  }, []);
+
+  const refreshClients = useCallback(async () => {
+    const response = await brokerApi.get("/api/broker-portal/clients");
+    const clients = response.data?.clients || response.data || [];
+    setSelectedClientState((previous) => {
+      const next = clients.find((client) => client._id === previous?._id) || clients[0] || null;
+      if (next) localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(next));
+      else localStorage.removeItem(CLIENT_STORAGE_KEY);
+      return next;
+    });
+    return clients;
+  }, []);
 
   useEffect(() => {
     async function hydrateBrokerAuth() {
@@ -39,25 +51,28 @@ export function BrokerAuthProvider({ children }) {
       try {
         const response = await brokerApi.get("/api/access/me");
         setBroker(response.data.broker);
+        await refreshClients();
       } catch (error) {
         localStorage.removeItem(BROKER_AUTH_STORAGE_KEY);
         localStorage.removeItem(LEGACY_BROKER_AUTH_STORAGE_KEY);
         setBroker(null);
+        setSelectedClient(null);
       } finally {
         setLoading(false);
       }
     }
 
     hydrateBrokerAuth();
-  }, []);
+  }, [refreshClients, setSelectedClient]);
 
-  async function login(tokenId) {
+  const login = useCallback(async (tokenId) => {
     const response = await publicApi.post("/api/access/login", { tokenId });
     localStorage.setItem(BROKER_AUTH_STORAGE_KEY, response.data.token);
     localStorage.removeItem(LEGACY_BROKER_AUTH_STORAGE_KEY);
     setBroker(response.data.broker);
+    await refreshClients();
     return response.data.broker;
-  }
+  }, [refreshClients]);
 
   async function refreshBroker() {
     const response = await brokerApi.get("/api/access/me");
@@ -89,8 +104,9 @@ export function BrokerAuthProvider({ children }) {
       login,
       logout,
       refreshBroker,
+      refreshClients,
     }),
-    [broker, selectedClient, loading]
+    [broker, selectedClient, loading, login, refreshClients, setSelectedClient]
   );
 
   return <BrokerAuthContext.Provider value={value}>{children}</BrokerAuthContext.Provider>;

@@ -125,8 +125,9 @@ export default function BrokerInvoicePage() {
     try {
       const response = await brokerApi.get("/api/broker-portal/clients");
       setCustomers(response.data);
-      if (!selectedClientId && response.data.length > 0) {
-        setSelectedClientId(response.data[0]._id);
+      if (!response.data.some((client) => client._id === selectedClientId)) {
+        setSelectedClientId(response.data[0]?._id || "");
+        setInvoiceData(null);
       }
       setError("");
     } catch (requestError) {

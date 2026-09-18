@@ -414,6 +414,7 @@ export default function BrokerProfilePage() {
 
   // Fetch fresh client data from database on mount if selected
   useEffect(() => {
+    setFreshClient(null);
     async function loadFreshClient() {
       if (!selectedClient?._id) return;
       try {
@@ -430,7 +431,7 @@ export default function BrokerProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClient?._id]);
 
-  const activeClient = freshClient || selectedClient;
+  const activeClient = freshClient?._id === selectedClient?._id ? freshClient : selectedClient;
 
   const handleCopy = (text, key) => {
     if (!text) return;

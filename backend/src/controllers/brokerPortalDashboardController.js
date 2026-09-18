@@ -5,11 +5,13 @@ const { roundCurrency } = require("../services/tradeMetrics");
 
 async function getBrokerOverview(req, res) {
   const brokerId = req.broker._id;
+  const ids = await Client.find({ brokerId, isDeleted: { $ne: true } }).distinct("_id");
+  const tradeQuery = { brokerId, clientId: { $in: ids } };
 
   const [clientCount, trades, recentTrades] = await Promise.all([
-    Client.countDocuments({ brokerId }),
-    Trade.find({ brokerId }).populate("clientId", "fullName clientCode idCode").sort({ tradedAt: -1 }),
-    Trade.find({ brokerId }).populate("clientId", "fullName clientCode idCode").sort({ tradedAt: -1 }).limit(5),
+    Client.countDocuments({ brokerId, isDeleted: { $ne: true } }),
+    Trade.find(tradeQuery).populate("clientId", "fullName clientCode idCode").sort({ tradedAt: -1 }),
+    Trade.find(tradeQuery).populate("clientId", "fullName clientCode idCode").sort({ tradedAt: -1 }).limit(5),
   ]);
 
   const totals = trades.reduce(

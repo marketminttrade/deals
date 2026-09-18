@@ -5,14 +5,20 @@ const { calculateCharges, roundCurrency } = require("../services/tradeMetrics");
 const { normalizeTradeInput } = require("../services/tradeInput");
 
 async function ensureBrokerClient(brokerId, clientId) {
-  return Client.findOne({ _id: clientId, brokerId });
+  if (!require("mongoose").isObjectIdOrHexString(clientId)) return null;
+  return Client.findOne({ _id: clientId, brokerId, isDeleted: { $ne: true } });
+}
+
+async function activeClientIds(brokerId) {
+  return Client.find({ brokerId, isDeleted: { $ne: true } }).distinct("_id");
 }
 
 async function listBrokerTrades(req, res) {
-  const query = { brokerId: req.broker._id };
+  const ids = await activeClientIds(req.broker._id);
+  const query = { brokerId: req.broker._id, clientId: { $in: ids } };
 
   if (req.query.clientId) {
-    query.clientId = req.query.clientId;
+    query.clientId = { $in: ids.filter((id) => String(id) === req.query.clientId) };
   }
 
   if (req.query.status) {
@@ -67,6 +73,9 @@ async function updateBrokerTrade(req, res) {
   }
 
   const clientId = req.body.clientId || existingTrade.clientId;
+  if (!await ensureBrokerClient(req.broker._id, existingTrade.clientId)) {
+    return res.status(404).json({ message: "Client not found for this broker." });
+  }
   const client = await ensureBrokerClient(req.broker._id, clientId);
   if (!client) {
     return res.status(404).json({ message: "Client not found for this broker." });
@@ -91,7 +100,7 @@ async function updateBrokerTrade(req, res) {
 }
 
 async function deleteBrokerTrade(req, res) {
-  const trade = await Trade.findOneAndDelete({ _id: req.params.tradeId, brokerId: req.broker._id });
+  const trade = await Trade.findOneAndDelete({ _id: req.params.tradeId, brokerId: req.broker._id, clientId: { $in: await activeClientIds(req.broker._id) } });
   if (!trade) {
     return res.status(404).json({ message: "Trade not found." });
   }
@@ -105,17 +114,17 @@ async function deleteSelectedBrokerTrades(req, res) {
     return res.status(400).json({ message: "tradeIds is required." });
   }
 
-  const result = await Trade.deleteMany({ _id: { $in: tradeIds }, brokerId: req.broker._id });
+  const result = await Trade.deleteMany({ _id: { $in: tradeIds }, brokerId: req.broker._id, clientId: { $in: await activeClientIds(req.broker._id) } });
   return res.json({ message: `${result.deletedCount} trade(s) deleted.` });
 }
 
 async function clearAllBrokerTrades(req, res) {
-  const result = await Trade.deleteMany({ brokerId: req.broker._id });
+  const result = await Trade.deleteMany({ brokerId: req.broker._id, clientId: { $in: await activeClientIds(req.broker._id) } });
   return res.json({ message: `${result.deletedCount} trade(s) cleared.` });
 }
 
 async function listBrokerHoldings(req, res) {
-  const trades = await Trade.find({ brokerId: req.broker._id, status: "open" }).populate(
+  const trades = await Trade.find({ brokerId: req.broker._id, status: "open", clientId: { $in: await activeClientIds(req.broker._id) } }).populate(
     "clientId",
     "fullName clientCode idCode"
   );

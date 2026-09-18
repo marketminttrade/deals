@@ -24,7 +24,8 @@ async function getInvoicePreview(req, res) {
     return res.status(400).json({ message: "clientId, fromDate, and toDate are required." });
   }
 
-  const client = await Client.findOne({ _id: clientId, brokerId: req.broker._id });
+  if (!require("mongoose").isObjectIdOrHexString(clientId)) return res.status(400).json({ message: "Invalid client ID." });
+  const client = await Client.findOne({ _id: clientId, brokerId: req.broker._id, isDeleted: { $ne: true } });
   if (!client) {
     return res.status(404).json({ message: "Client not found." });
   }

@@ -86,18 +86,53 @@ const MoreVerticalIcon = () => (
 );
 
 // ── Client Switcher Bottom Sheet Modal ────────────────────
-function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
+export function ClientSwitcherModal({ clients, selectedId, onSelect, onClose, onRefresh }) {
   const [query, setQuery] = useState("");
+  const [bin, setBin] = useState(false);
+  const [deleted, setDeleted] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  async function loadBin() {
+    const response = await brokerApi.get("/api/broker-portal/clients/recycle-bin");
+    setDeleted(response.data);
+  }
+  async function toggleBin() {
+    setBusy(true);
+    setError("");
+    try { await loadBin(); setBin(!bin); }
+    catch (err) { setError(err.response?.data?.message || "Unable to load Recycle Bin."); }
+    finally { setBusy(false); }
+  }
+  async function act(client, action) {
+    if (action !== "restore" && !window.confirm(action === "permanent-delete"
+      ? `Permanently delete ${client.fullName}, all their trades and KYC files? This cannot be undone.`
+      : `Move ${client.fullName} to Recycle Bin? Their data will be permanently deleted after 3 days.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const url = `/api/broker-portal/clients/${client._id}/${action}`;
+      if (action === "restore") await brokerApi.patch(url);
+      else await brokerApi.delete(url);
+      await onRefresh();
+      await loadBin();
+    } catch (err) { setError(err.response?.data?.message || "Unable to update account. Please retry."); }
+    finally { setBusy(false); }
+  }
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return clients.filter(
+    return (bin ? deleted : clients).filter(
       (c) =>
         c.fullName?.toLowerCase().includes(q) ||
         c.clientCode?.toLowerCase().includes(q) ||
         c.idCode?.toLowerCase().includes(q)
     );
-  }, [clients, query]);
+  }, [clients, deleted, bin, query]);
 
   return (
     <div
@@ -113,6 +148,10 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={bin ? "Recycle Bin" : "Accounts"}
+        onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}
         style={{
           width: "100%",
           maxWidth: 540,
@@ -141,12 +180,16 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
           }}
         >
           <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, fontFamily: "Inter, sans-serif" }}>
-            Select Account
+            {bin ? "Recycle Bin" : "Accounts"}
           </h2>
           <button type="button" className="bp-icon-btn" onClick={onClose} aria-label="Close">
             <CloseIcon />
           </button>
         </div>
+        <button type="button" className="bp-btn" disabled={busy} onClick={toggleBin}>
+          {bin ? "Back to Accounts" : "Recycle Bin"}
+        </button>
+        {error && <p role="alert" style={{ padding: "0 16px", color: "var(--bp-red)" }}>{error}</p>}
 
         {/* Search Input */}
         <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--bp-border)", background: "var(--bp-surface2)" }}>
@@ -172,9 +215,8 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
           {filtered.map((client) => {
             const isSel = selectedId === client._id;
             return (
-              <button
+              <div
                 key={client._id}
-                type="button"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -189,8 +231,9 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
                   margin: "4px 0",
                   transition: "background 0.12s",
                 }}
-                onClick={() => { onSelect(client); onClose(); }}
               >
+                <button type="button" disabled={busy || bin} onClick={() => { onSelect(client); onClose(); }}
+                  style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, border: 0, background: "transparent", textAlign: "left", color: "inherit", cursor: bin ? "default" : "pointer" }}>
                 <div className="bp-avatar bp-avatar--sm" style={{ background: "var(--bp-blue)", flexShrink: 0 }}>
                   {initialsFromName(client.fullName)}
                 </div>
@@ -207,7 +250,15 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
                     Active
                   </span>
                 )}
-              </button>
+                </button>
+                {bin ? <div style={{ display: "grid", gap: 6, fontSize: "0.75rem" }}>
+                  <span>{client.purgeStartedAt ? "Deletion in progress" : new Date(client.expiresAt).getTime() <= now ? "Awaiting automatic deletion" : `${Math.ceil((new Date(client.expiresAt).getTime() - now) / 86400000)} day(s) left`}</span>
+                  <button type="button" disabled={busy || Boolean(client.purgeStartedAt)} onClick={() => act(client, "restore")}>Restore</button>
+                  <button type="button" disabled={busy} onClick={() => act(client, "permanent-delete")}>Permanently Delete</button>
+                </div> : <button type="button" disabled={busy} className="bp-icon-btn" aria-label={`Delete ${client.fullName}`} onClick={() => act(client, "soft-delete")}>
+                  <span aria-hidden="true">🗑</span>
+                </button>}
+              </div>
             );
           })}
         </div>
@@ -219,21 +270,20 @@ function ClientSwitcherModal({ clients, selectedId, onSelect, onClose }) {
 // ── Main Page ─────────────────────────────────────────────
 export default function BrokerDashboardPage() {
   const navigate = useNavigate();
-  const { selectedClient, setSelectedClient } = useBrokerAuth();
+  const { selectedClient, setSelectedClient, refreshClients } = useBrokerAuth();
 
   const [clients, setClients] = useState([]);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  async function refreshAccounts() {
+    const list = await refreshClients();
+    setClients(list);
+  }
 
   // Load clients
   useEffect(() => {
     async function load() {
       try {
-        const clRes = await brokerApi.get("/api/broker-portal/clients");
-        const clientList = clRes.data?.clients || clRes.data || [];
-        setClients(clientList);
-        if (clientList.length > 0 && !selectedClient) {
-          setSelectedClient(clientList[0]);
-        }
+        await refreshAccounts();
       } catch {
         // silent load
       }
@@ -274,8 +324,8 @@ export default function BrokerDashboardPage() {
     {
       key: "switch",
       icon: <SwitchIcon />,
-      title: "Switch Account",
-      sub: "Switch to another account",
+      title: "Accounts",
+      sub: "Manage client accounts",
       onClick: () => setShowSwitcher(true),
     },
   ], [navigate]);
@@ -461,6 +511,7 @@ export default function BrokerDashboardPage() {
       {/* ── Client Switcher Modal ── */}
       {showSwitcher && (
         <ClientSwitcherModal
+          onRefresh={refreshAccounts}
           clients={clients}
           selectedId={selectedClient?._id}
           onSelect={setSelectedClient}

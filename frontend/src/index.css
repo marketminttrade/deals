@@ -3946,6 +3946,15 @@ button, input, select, textarea, a {
   background: var(--bp-surface2);
 }
 
+.bp-trade-aligned-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 6px;
+}
+.bp-trade-aligned-row > :last-child { justify-self: end; }
+.bp-compact-pnl > div { padding: 8px 10px !important; border-radius: 12px !important; min-width: 0; }
+.bp-compact-pnl .bp-card-val { font-size: 1.1rem !important; overflow-wrap: anywhere; }
+.bp-compact-pnl > div > span:last-child { margin-top: 4px !important; }
 .bp-position-row {
   display: flex;
   align-items: center;

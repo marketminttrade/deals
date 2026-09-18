@@ -113,6 +113,7 @@ app.use((err, req, res, next) => {
 async function startServer() {
   await connectDatabase();
   await seedAdminUser();
+  require("./services/clientDeletion").startClientPurge();
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Broker platform API running on http://0.0.0.0:${PORT}`);

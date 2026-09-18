@@ -9,6 +9,9 @@ const clientSchema = new mongoose.Schema(
       index: true,
     },
     fullName: { type: String, required: true, trim: true },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    purgeStartedAt: { type: Date, default: null },
     clientCode: { type: String, required: true, trim: true, uppercase: true },
     idCode: { type: String, required: true, trim: true, uppercase: true },
     email: { type: String, trim: true, lowercase: true },
@@ -111,6 +114,8 @@ const clientSchema = new mongoose.Schema(
 );
 
 clientSchema.index({ brokerId: 1, clientCode: 1 }, { unique: true });
+clientSchema.index({ brokerId: 1, isDeleted: 1, deletedAt: 1 });
+clientSchema.index({ isDeleted: 1, deletedAt: 1 });
 clientSchema.index({ brokerId: 1, idCode: 1 }, { unique: true });
 
 module.exports = mongoose.model("Client", clientSchema);

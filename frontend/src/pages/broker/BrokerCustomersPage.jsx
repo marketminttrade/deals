@@ -718,6 +718,7 @@ export default function BrokerCustomersPage() {
   }, [location.state, navigate, location.pathname]);
 
   useEffect(() => {
+    setKycPreview(null);
     if (selectedClient) {
       setKycForm(buildKycFormFromCustomer(selectedClient));
       loadKycPreview(selectedClient._id);

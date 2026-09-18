@@ -69,6 +69,17 @@ export function maskPhoneNumber(value) {
   });
 }
 
+export function maskEmail(value) {
+  const email = String(value ?? "").trim();
+  if (!email) return "-";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "***";
+  const [local, domain] = email.split("@");
+  const parts = domain.split(".");
+  const tld = parts.pop();
+  const maskedLocal = local.length > 4 ? `${local.slice(0, 2)}***${local.slice(-2)}` : `${local[0]}***`;
+  return `${maskedLocal}@${parts.map((part) => `${part.slice(0, Math.min(2, Math.max(0, part.length - 1)))}***`).join(".")}.${tld}`;
+}
+
 export function initialsFromName(value) {
   if (!value) {
     return "BR";

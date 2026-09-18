@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { resolveAssetUrl } from "./assets";
+import { maskEmail, maskPhoneNumber } from "./formatters";
 
 function cleanPdfText(val) {
   if (val === null || val === undefined) return "-";
@@ -357,8 +358,8 @@ export async function downloadCustomerKycPdf({ broker, client }) {
   leftY += drawRow(
     doc,
     [
-      { label: "Mobile Number", value: client?.phone, ratio: 1 },
-      { label: "Email Address", value: client?.email, ratio: 1.3 },
+      { label: "Mobile Number", value: maskPhoneNumber(client?.phone), ratio: 1 },
+      { label: "Email Address", value: maskEmail(client?.email), ratio: 1.3 },
     ],
     margin,
     leftY,

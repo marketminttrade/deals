@@ -384,10 +384,13 @@ function TradeDetailPage({ trade, onBack }) {
                 {tradeModeLabel(currentTrade.tradeMode)}
               </span>
             </div>
+            <span className={String(currentTrade.side).toLowerCase() === "sell" ? "bp-loss" : "bp-profit"} style={{ fontWeight: 700 }}>
+              {String(currentTrade.side).toUpperCase()}
+            </span>
           </div>
 
           {/* ── P&L and charges use the same open/closed contract as summaries. ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+          <div className="bp-compact-pnl" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
             <div style={{
               background: "var(--bp-surface)",
               border: "1px solid var(--bp-border)",
@@ -592,7 +595,7 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
 
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Row 1 */}
-        <div className="bp-position-row bp-position-row--1">
+        <div className="bp-position-row bp-position-row--1 bp-trade-aligned-row">
           <span>Qty. {pnlObj.totalUnits}</span>
           <span>Exit Avg. {hasSell ? Number(sellPrice).toFixed(2) : "–"}</span>
           <span className="bp-order-mode-tag">{tradeModeText} · {pnlObj.isClosed ? "CLOSED" : "OPEN"}</span>
@@ -607,7 +610,7 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
         </div>
 
         {/* Row 3 */}
-        <div className="bp-position-row bp-position-row--3">
+        <div className="bp-position-row bp-position-row--3 bp-trade-aligned-row">
           <span>{exchangeTag}</span>
           <span>Entry Avg. {Number(buyPrice).toFixed(2)}</span>
           <span style={{ color: pnlObj.isOpen && ltp !== null ? (trade.ltpColor === "red" ? "var(--bp-red)" : (trade.ltpColor === "green" ? "var(--bp-green)" : "inherit")) : "inherit" }}>
@@ -892,9 +895,9 @@ export default function BrokerTradesPage() {
       {/* ── Sticky Bottom MTM Bar matching Orders.jpeg ── */}
       {!loading && filteredTrades.length > 0 && (
         <div className="bp-mtm-bar">
-          <span className="bp-mtm-bar__label">Unrealised MTM</span>
-          <span className={`bp-mtm-bar__value ${unrealisedPnL === null ? "" : unrealisedPnL >= 0 ? "bp-profit" : "bp-loss"}`}>
-            {formatSignedPnl(unrealisedPnL)}
+          <span className="bp-mtm-bar__label">MTM</span>
+          <span className={`bp-mtm-bar__value ${totalPnL === null ? "" : totalPnL >= 0 ? "bp-profit" : "bp-loss"}`}>
+            {formatSignedPnl(totalPnL)}
           </span>
         </div>
       )}

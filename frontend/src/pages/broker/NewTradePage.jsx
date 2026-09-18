@@ -260,7 +260,7 @@ const initialTradeForm = {
   exchange: "NSE",
   side: "buy",
   orderType: "Market Order",
-  quantity: 1,
+  quantity: 0,
   lotSize: 1,
   productType: "Delivery (CNC)",
   priceType: "Market",
@@ -328,7 +328,7 @@ export default function NewTradePage() {
               exchange: tradeToEdit.instrument === "EQUITY" ? "NSE" : tradeToEdit.segment === "commodity" ? "MCX" : "NFO",
               side: tradeToEdit.side || "buy",
               orderType: "Market Order",
-              quantity: tradeToEdit.quantity || 1,
+              quantity: tradeToEdit.quantity ?? 0,
               lotSize: tradeToEdit.lotSize || 1,
               productType: getValidProductType(type, pType),
               priceType: "Market",
@@ -354,9 +354,9 @@ export default function NewTradePage() {
             });
           }
         } else if (clientList.length > 0) {
-          const activeClient = selectedClient?._id ? selectedClient : clientList[0];
+          const activeClient = clientList.find((client) => client._id === selectedClient?._id) || clientList[0];
           setForm((f) => ({ ...f, clientId: activeClient._id }));
-          if (!selectedClient) setSelectedClient(activeClient);
+          if (selectedClient?._id !== activeClient._id) setSelectedClient(activeClient);
         }
       } catch {
         setError("Unable to load client data.");
@@ -400,11 +400,15 @@ export default function NewTradePage() {
   };
 
   const handleQtyChange = (delta) => {
-    setForm((f) => ({ ...f, quantity: Math.max(1, Number(f.quantity || 1) + delta) }));
+    setForm((f) => ({ ...f, quantity: Math.max(0, Number(f.quantity || 0) + delta) }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!Number.isSafeInteger(Number(form.quantity)) || Number(form.quantity) < 1) {
+      setError("Please enter a positive whole-number quantity.");
+      return;
+    }
     if (!form.clientId) {
       setError("Please select a client account.");
       return;
@@ -778,6 +782,7 @@ export default function NewTradePage() {
                   <button
                     type="button"
                     onClick={() => handleQtyChange(-1)}
+                    aria-label="Decrease quantity"
                     style={{ width: 36, height: "100%", border: "none", background: "#F8F9FC", fontSize: "18px", fontWeight: 700, color: "#0F172A", cursor: "pointer", flexShrink: 0 }}
                   >
                     –
@@ -786,13 +791,15 @@ export default function NewTradePage() {
                     type="number"
                     min="1"
                     value={form.quantity}
-                    onChange={(e) => setForm((f) => ({ ...f, quantity: Math.max(1, Number(e.target.value)) }))}
+                    aria-label="Quantity"
+                    onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
                     style={{ flex: 1, minWidth: 0, border: "none", outline: "none", textAlign: "center", fontSize: "1rem", fontWeight: 700, color: "#0F172A", fontFamily: "Inter, sans-serif" }}
                     required
                   />
                   <button
                     type="button"
                     onClick={() => handleQtyChange(1)}
+                    aria-label="Increase quantity"
                     style={{ width: 36, height: "100%", border: "none", background: "#F8F9FC", fontSize: "18px", fontWeight: 700, color: "#0F172A", cursor: "pointer", flexShrink: 0 }}
                   >
                     +

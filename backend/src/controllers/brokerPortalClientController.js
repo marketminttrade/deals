@@ -185,12 +185,12 @@ function serializeBroker(broker) {
 }
 
 async function findBrokerClient(brokerId, clientId) {
-  return Client.findOne({ _id: clientId, brokerId });
+  return Client.findOne({ _id: clientId, brokerId, isDeleted: { $ne: true } });
 }
 
 async function listBrokerClients(req, res) {
   const search = String(req.query.search || "").trim();
-  const query = { brokerId: req.broker._id };
+  const query = { brokerId: req.broker._id, isDeleted: { $ne: true } };
 
   if (search) {
     query.$or = [
@@ -232,7 +232,7 @@ async function updateBrokerClient(req, res) {
 
   const payload = buildClientPayload(req.body, existing);
   const client = await Client.findOneAndUpdate(
-    { _id: req.params.clientId, brokerId: req.broker._id },
+    { _id: req.params.clientId, brokerId: req.broker._id, isDeleted: { $ne: true } },
     payload,
     { new: true, runValidators: true }
   );
