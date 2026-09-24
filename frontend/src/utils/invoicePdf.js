@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { resolveAssetUrl } from "./assets";
 import { formatAmount } from "./formatters";
+import { getInvoiceExchangeLabels } from "./invoiceExchanges";
 
 async function urlToDataUrl(url) {
   if (!url) {
@@ -155,6 +156,7 @@ export async function downloadBrokerInvoicePdf({
   const usableWidth = pageWidth - margin * 2; // 555.28
 
   const invoiceTrades = trades || [];
+  const { exchangeLabel, chargeExchangeLabel } = getInvoiceExchangeLabels(invoiceTrades);
 
   // Toggle Visibility Defaults
   const showCharges = toggles.showChargesBreakup !== false;
@@ -570,11 +572,11 @@ export async function downloadBrokerInvoicePdf({
     doc.text("CHARGES BREAKUP", b1X + 8, y + 10);
 
     const chargeItems = [
-      { sr: "1", name: "Brokerage", exch: "NSE", amt: formatAmount(totalBrokerage) },
-      { sr: "2", name: "Exchange Charges", exch: "NSE", amt: "0.00" },
-      { sr: "3", name: "SEBI Charges", exch: "NSE", amt: "0.00" },
-      { sr: "4", name: "GST (0.0%)", exch: "NSE", amt: "0.00" },
-      { sr: "5", name: "Stamp Duty", exch: "NSE", amt: "0.00" },
+      { sr: "1", name: "Brokerage", exch: chargeExchangeLabel, amt: formatAmount(totalBrokerage) },
+      { sr: "2", name: "Exchange Charges", exch: chargeExchangeLabel, amt: "0.00" },
+      { sr: "3", name: "SEBI Charges", exch: chargeExchangeLabel, amt: "0.00" },
+      { sr: "4", name: "GST (0.0%)", exch: chargeExchangeLabel, amt: "0.00" },
+      { sr: "5", name: "Stamp Duty", exch: chargeExchangeLabel, amt: "0.00" },
     ];
 
     doc.setFont("helvetica", "normal");
@@ -654,7 +656,7 @@ export async function downloadBrokerInvoicePdf({
     doc.text("Exchange", b2X + 8, b2SubY + 31);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 23, 42);
-    doc.text("NSE", b2X + bColWidth - 8, b2SubY + 31, { align: "right" });
+    doc.text(exchangeLabel, b2X + bColWidth - 8, b2SubY + 31, { align: "right", maxWidth: bColWidth - 64 });
 
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 116, 139);

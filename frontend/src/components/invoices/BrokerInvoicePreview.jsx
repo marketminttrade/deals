@@ -1,5 +1,6 @@
 import { formatAmount, formatDate, formatCurrency } from "../../utils/formatters";
 import { resolveAssetUrl } from "../../utils/assets";
+import { getInvoiceExchangeLabels } from "../../utils/invoiceExchanges";
 
 function productLabel(mode, segment) {
   if (segment === "futures" || segment === "options" || segment === "FUT" || segment === "OPT") return "Intraday";
@@ -24,6 +25,7 @@ export default function BrokerInvoicePreview({
   toggles = {},
 }) {
   const invoiceTrades = trades || [];
+  const { exchangeLabel, chargeExchangeLabel } = getInvoiceExchangeLabels(invoiceTrades);
 
   const logoUrl = broker?.branding?.logoUrl;
   const horizontalLogoUrl = broker?.branding?.horizontalLogoUrl;
@@ -304,31 +306,31 @@ export default function BrokerInvoicePreview({
                   <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "4px", textAlign: "center" }}>1</td>
                     <td style={{ padding: "4px", fontWeight: 600 }}>Brokerage</td>
-                    <td style={{ padding: "4px", textAlign: "center" }}>NSE</td>
+                    <td style={{ padding: "4px", textAlign: "center" }}>{chargeExchangeLabel}</td>
                     <td style={{ padding: "4px", textAlign: "right" }}>{formatAmount(totalBrokerage)}</td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "4px", textAlign: "center" }}>2</td>
                     <td style={{ padding: "4px" }}>Exchange Charges</td>
-                    <td style={{ padding: "4px", textAlign: "center" }}>NSE</td>
+                    <td style={{ padding: "4px", textAlign: "center" }}>{chargeExchangeLabel}</td>
                     <td style={{ padding: "4px", textAlign: "right" }}>0.00</td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "4px", textAlign: "center" }}>3</td>
                     <td style={{ padding: "4px" }}>SEBI Charges</td>
-                    <td style={{ padding: "4px", textAlign: "center" }}>NSE</td>
+                    <td style={{ padding: "4px", textAlign: "center" }}>{chargeExchangeLabel}</td>
                     <td style={{ padding: "4px", textAlign: "right" }}>0.00</td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "4px", textAlign: "center" }}>4</td>
                     <td style={{ padding: "4px" }}>GST (0.0%)</td>
-                    <td style={{ padding: "4px", textAlign: "center" }}>NSE</td>
+                    <td style={{ padding: "4px", textAlign: "center" }}>{chargeExchangeLabel}</td>
                     <td style={{ padding: "4px", textAlign: "right" }}>0.00</td>
                   </tr>
                   <tr>
                     <td style={{ padding: "4px", textAlign: "center" }}>5</td>
                     <td style={{ padding: "4px" }}>Stamp Duty</td>
-                    <td style={{ padding: "4px", textAlign: "center" }}>NSE</td>
+                    <td style={{ padding: "4px", textAlign: "center" }}>{chargeExchangeLabel}</td>
                     <td style={{ padding: "4px", textAlign: "right" }}>0.00</td>
                   </tr>
                 </tbody>
@@ -360,7 +362,7 @@ export default function BrokerInvoicePreview({
                 </div>
                 <div style={{ padding: "8px 10px", fontSize: "0.72rem", display: "grid", gap: 3 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Segment</span><strong>Equity, F&O</strong></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Exchange</span><strong>NSE</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>Exchange</span><strong style={{ textAlign: "right" }}>{exchangeLabel}</strong></div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total Turnover</span><strong>{formatCurrency(totalTurnover)}</strong></div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total Trades</span><strong>{totalTrades}</strong></div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total Qty</span><strong>{totalQty}</strong></div>

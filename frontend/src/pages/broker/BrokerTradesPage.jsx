@@ -191,7 +191,7 @@ function TradeDetailPage({ trade, onBack }) {
   const actualBuyPrice = currentTrade.side === "sell" ? sellPrice : buyPrice;
   const actualSellPrice = currentTrade.side === "sell" ? buyPrice : sellPrice;
 
-  const exchangeTag = currentTrade.instrument === "EQUITY" ? "NSE" : (currentTrade.segment === "commodity" ? "MCX" : "NFO");
+  const exchangeTag = currentTrade.exchange || "—";
   const totalUnits = Number(currentTrade.quantity || 1) * Number(currentTrade.lotSize || 1);
   const pnlPercent = buyPrice && grossPnL !== null && totalUnits
     ? ((grossPnL / (buyPrice * totalUnits)) * 100).toFixed(2)
@@ -564,7 +564,7 @@ function PositionCard({ trade, onClick, selectionMode, isSelected, onToggleSelec
   const hasSell = pnlObj.isClosed;
   const ltp = pnlObj.isOpen ? pnlObj.markPrice : null;
 
-  const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
+  const exchangeTag = trade.exchange || "—";
   const tradeModeText = (trade.tradeMode || "mis").toUpperCase();
 
   const handleCardClick = (e) => {

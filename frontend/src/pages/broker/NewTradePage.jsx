@@ -313,9 +313,9 @@ export default function NewTradePage() {
             const lifecycle = resolveTradeLifecycle(tradeToEdit);
             setExistingTimeline(tradeToEdit.orderTimeline || null);
             let type = "Equity";
-            if (tradeToEdit.instrument === "OPTIDX" || tradeToEdit.segment === "options") type = "Options";
+            if (tradeToEdit.segment === "commodity") type = "Commodity";
+            else if (tradeToEdit.instrument === "OPTIDX" || tradeToEdit.segment === "options") type = "Options";
             else if (tradeToEdit.instrument === "FUTSTK" || tradeToEdit.instrument === "FUTIDX" || tradeToEdit.segment === "futures") type = "Futures";
-            else if (tradeToEdit.segment === "commodity") type = "Commodity";
 
             let pType = "Delivery (CNC)";
             if (tradeToEdit.tradeMode === "mis") pType = "Intraday (MIS)";
@@ -325,7 +325,7 @@ export default function NewTradePage() {
               clientId: tradeToEdit.clientId?._id || tradeToEdit.clientId || "",
               tradeType: type,
               symbol: tradeToEdit.symbol || tradeToEdit.stockName || "",
-              exchange: tradeToEdit.instrument === "EQUITY" ? "NSE" : tradeToEdit.segment === "commodity" ? "MCX" : "NFO",
+              exchange: tradeToEdit.exchange || "",
               side: tradeToEdit.side || "buy",
               orderType: "Market Order",
               quantity: tradeToEdit.quantity ?? 0,
@@ -454,6 +454,7 @@ export default function NewTradePage() {
       instrument,
       tradeMode,
       segment,
+      exchange: form.exchange,
       side: form.side,
       quantity: Number(form.quantity),
       lotSize: Number(form.lotSize || 1),
@@ -672,14 +673,16 @@ export default function NewTradePage() {
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <label className="bp-form-label">Exchange *</label>
+                <label className="bp-form-label" htmlFor="trade-exchange">Exchange *</label>
                 <select
+                  id="trade-exchange"
                   className="bp-select"
                   value={form.exchange}
                   onChange={(e) => setForm((f) => ({ ...f, exchange: e.target.value }))}
                   required
                   style={{ width: "100%", boxSizing: "border-box", color: "#0F172A", backgroundColor: "#ffffff" }}
                 >
+                  <option value="" disabled>Select exchange</option>
                   {form.tradeType === "Equity" && (
                     <>
                       <option value="NSE" style={{ color: "var(--bp-text)", backgroundColor: "var(--bp-surface)" }}>NSE</option>

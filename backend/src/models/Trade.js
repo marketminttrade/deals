@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { BROKERAGE_MODES } = require("../services/tradeInput");
+const { BROKERAGE_MODES, TRADE_EXCHANGES } = require("../services/tradeInput");
 
 const tradeSchema = new mongoose.Schema(
   {
@@ -17,6 +17,7 @@ const tradeSchema = new mongoose.Schema(
     },
     symbol: { type: String, required: true, trim: true, uppercase: true },
     stockName: { type: String, trim: true },
+    exchange: { type: String, enum: TRADE_EXCHANGES, trim: true, uppercase: true },
     // Instrument type — EQUITY, OPTIDX (Options on Index), FUTSTK (Futures on Stock), FUTIDX (Futures on Index)
     instrument: {
       type: String,

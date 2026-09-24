@@ -102,7 +102,7 @@ function HoldingCard({ trade, hideValues, onClick }) {
   const invested = avgPrice * totalUnits;
   const marketVal = ltp === null ? null : ltp * totalUnits;
   const pctChange = invested > 0 && marketVal !== null ? (((marketVal - invested) / invested) * 100).toFixed(2) : null;
-  const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
+  const exchangeTag = trade.exchange || "—";
 
   return (
     <div
@@ -206,7 +206,7 @@ function PositionItem({ trade, onClick }) {
   const buyPrice = Number(trade.buyPrice ?? trade.entryPrice ?? 0);
   const ltp = pnlObj.markPrice;
 
-  const exchangeTag = trade.instrument === "EQUITY" ? "NSE" : (trade.segment === "commodity" ? "MCX" : "NFO");
+  const exchangeTag = trade.exchange || "—";
   const tradeModeText = (trade.tradeMode || "mis").toUpperCase();
 
   return (

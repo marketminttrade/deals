@@ -1,4 +1,5 @@
 const BROKERAGE_MODES = ["percentage", "flat_per_lot", "paisa_per_share", "flat_per_order"];
+const TRADE_EXCHANGES = ["NSE", "BSE", "NFO", "BFO", "MCX"];
 const CALCULATION_VERSION = 2;
 
 function invalid(message) {
@@ -53,6 +54,18 @@ function dateValue(value, label) {
   return date;
 }
 
+function normalizeTradeExchange(value, segment) {
+  if (value === undefined) return undefined;
+  const exchange = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!TRADE_EXCHANGES.includes(exchange)) invalid("Select a supported exchange.");
+  const allowedExchanges = segment === "commodity" ? ["MCX"]
+    : ["futures", "options"].includes(segment) ? ["NFO", "BFO", "MCX"] : ["NSE", "BSE"];
+  if (!allowedExchanges.includes(exchange)) {
+    invalid(`Exchange must be ${allowedExchanges.join(" or ")} for ${segment} trades.`);
+  }
+  return exchange;
+}
+
 // Merge aliases explicitly so PATCH can clear an exit and does not revive an old alias.
 function normalizeTradeInput(input, existing = {}) {
   const merged = { ...existing, ...input };
@@ -75,6 +88,7 @@ function normalizeTradeInput(input, existing = {}) {
   const tradeMode = String(merged.tradeMode || (merged.segment === "delivery" ? "cnc" : "mis")).toLowerCase();
   const segment = merged.segment === "commodity" ? "commodity" : instrument === "OPTIDX" ? "options"
     : ["FUTIDX", "FUTSTK"].includes(instrument) ? "futures" : tradeMode === "mis" ? "intraday" : "delivery";
+  const exchange = normalizeTradeExchange(merged.exchange, segment);
   const financial = validateFinancialInput({ ...merged, instrument, segment });
   const closed = financial.exitPrice !== undefined;
   if (input.status && input.status !== (closed ? "closed" : "open")) {
@@ -87,7 +101,7 @@ function normalizeTradeInput(input, existing = {}) {
   const sellExecuted = financial.side === "sell" || closed;
   return {
     clientId: merged.clientId,
-    symbol: stockName, stockName, instrument, tradeMode, segment,
+    symbol: stockName, stockName, instrument, tradeMode, segment, exchange,
     ...financial,
     buyPrice: financial.entryPrice,
     sellPrice: financial.exitPrice ?? null,
@@ -109,4 +123,4 @@ function normalizeTradeInput(input, existing = {}) {
   };
 }
 
-module.exports = { BROKERAGE_MODES, CALCULATION_VERSION, invalid, resolveBrokerageMode, validateFinancialInput, normalizeTradeInput };
+module.exports = { BROKERAGE_MODES, TRADE_EXCHANGES, CALCULATION_VERSION, invalid, resolveBrokerageMode, validateFinancialInput, normalizeTradeInput };
